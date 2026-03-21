@@ -13,6 +13,7 @@ __pycache__/
 *.pyo
 *.sqlite3
 *.db
+*.tsbuildinfo
 api/data/runtime/
 prompt-library/data/runtime/
 code-search/data/runtime/

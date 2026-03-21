@@ -63,6 +63,30 @@ export type SearchResult = {
   indexedAt: string;
 };
 
+export type MemoryCardSummary = {
+  filename: string;
+  title: string;
+  category: string;
+  tags: string[];
+  created: string | null;
+  updated: string | null;
+  excerpt: string;
+};
+
+export type MemoryCard = MemoryCardSummary & {
+  content: string;
+};
+
+export type JournalEntry = {
+  date: string;
+  content: string;
+};
+
+export type WorkspaceFile = {
+  filename: string;
+  content: string;
+};
+
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8005";
 const promptsBase = import.meta.env.VITE_PROMPT_LIBRARY_BASE_URL ?? "http://localhost:5202";
 const searchBase = import.meta.env.VITE_CODE_SEARCH_BASE_URL ?? "http://localhost:5204";
@@ -90,6 +114,14 @@ export const api = {
   getSecurityAudit: () => requestJson<SecurityAudit>(`${apiBase}/api/security-audit`),
   getArchitecture: () => requestJson<Architecture>(`${apiBase}/api/architecture`),
   getBacklog: () => requestJson<{ items: BacklogItem[] }>(`${apiBase}/api/backlog`),
+  getMemoryCards: () => requestJson<{ cards: MemoryCardSummary[] }>(`${apiBase}/api/memory/cards`),
+  getMemoryCard: (filename: string) =>
+    requestJson<MemoryCard>(`${apiBase}/api/memory/cards/${encodeURIComponent(filename)}`),
+  getJournalDates: () => requestJson<{ dates: string[] }>(`${apiBase}/api/journal`),
+  getJournalEntry: (date: string) => requestJson<JournalEntry>(`${apiBase}/api/journal/${encodeURIComponent(date)}`),
+  getWorkspaceFiles: () => requestJson<{ files: string[] }>(`${apiBase}/api/workspace/files`),
+  getWorkspaceFile: (filename: string) =>
+    requestJson<WorkspaceFile>(`${apiBase}/api/workspace/files/${encodeURIComponent(filename)}`),
   getPrompts: () => requestJson<PromptRecord[]>(`${promptsBase}/api/prompts`),
   createPrompt: (payload: Partial<PromptRecord>) =>
     requestJson<PromptRecord>(`${promptsBase}/api/prompts`, {
@@ -121,4 +153,3 @@ export const api = {
     }),
   getSearchHealth: () => requestJson<{ status: string; documents: number; model: string }>(`${searchBase}/api/health`)
 };
-
