@@ -1,4 +1,16 @@
-import { Activity, BookCopy, CalendarClock, LayoutDashboard, Radar, SearchCode, ServerCog, ShieldCheck } from "lucide-react";
+import {
+  Activity,
+  BookCopy,
+  BookOpen,
+  Brain,
+  CalendarClock,
+  LayoutDashboard,
+  Radar,
+  SearchCode,
+  ServerCog,
+  Settings,
+  ShieldCheck
+} from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 const navItems = [
@@ -7,6 +19,9 @@ const navItems = [
   { to: "/intel-feed", label: "Intel Feed", icon: Radar },
   { to: "/security", label: "Security", icon: ShieldCheck },
   { to: "/infrastructure", label: "Infrastructure", icon: ServerCog },
+  { to: "/memory", label: "Memory Browser", icon: Brain },
+  { to: "/journal", label: "Journal", icon: BookOpen },
+  { to: "/workspace", label: "Workspace Config", icon: Settings },
   { to: "/code-search", label: "Code Search", icon: SearchCode },
   { to: "/prompts", label: "Prompts", icon: BookCopy },
   { to: "/backlog", label: "Backlog", icon: Activity }
@@ -55,7 +70,7 @@ export function AppShell() {
           <header className="panel flex flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="panel-title">Workspace</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Self-hosted visibility across services, search, and prompts</h2>
+              <h2 className="mt-2 text-2xl font-bold text-white">Self-hosted visibility across services, search, prompts, and working memory</h2>
             </div>
             <div className="flex gap-3 text-sm text-slate-400">
               <div className="rounded-full border border-slate-800 px-4 py-2">UI :5173</div>
@@ -71,4 +86,3 @@ export function AppShell() {
     </div>
   );
 }
-
