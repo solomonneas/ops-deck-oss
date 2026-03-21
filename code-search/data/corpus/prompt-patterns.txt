@@ -1,0 +1,7 @@
+Prompt patterns for generic operations teams:
+
+- Summaries should include facts, deviations, and next actions.
+- Incident prompts should capture timeline, blast radius, mitigations, and follow-up items.
+- Backlog refinement prompts should define acceptance criteria and estimated effort.
+- Threat review prompts should identify assumptions, trust boundaries, and weakest controls.
+

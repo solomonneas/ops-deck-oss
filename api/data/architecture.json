@@ -1,0 +1,52 @@
+{
+  "updatedAt": "2026-03-21T00:00:00.000Z",
+  "services": [
+    {
+      "id": "svc-ui",
+      "name": "ui",
+      "port": 5173,
+      "language": "TypeScript",
+      "role": "Operator dashboard and workflow surface",
+      "dependencies": ["api", "code-search", "prompt-library"]
+    },
+    {
+      "id": "svc-api",
+      "name": "api",
+      "port": 8005,
+      "language": "Node.js",
+      "role": "Operational telemetry and seeded dashboard data",
+      "dependencies": []
+    },
+    {
+      "id": "svc-prompts",
+      "name": "prompt-library",
+      "port": 5202,
+      "language": "Node.js",
+      "role": "Prompt CRUD and versionable templates",
+      "dependencies": []
+    },
+    {
+      "id": "svc-search",
+      "name": "code-search",
+      "port": 5204,
+      "language": "Python",
+      "role": "Hybrid lexical and semantic search over local corpus",
+      "dependencies": ["ollama"]
+    },
+    {
+      "id": "svc-ollama",
+      "name": "ollama",
+      "port": 11434,
+      "language": "runtime",
+      "role": "Optional embedding provider",
+      "dependencies": []
+    }
+  ],
+  "flows": [
+    "UI requests telemetry from the API for dashboards, infra, security, and backlog views.",
+    "UI writes and reads prompts through the prompt-library service with persistent storage.",
+    "Code-search indexes local corpus files into SQLite and optionally requests embeddings from Ollama.",
+    "Docker Compose wires all services onto one internal network for a self-hosted developer workflow."
+  ]
+}
+
