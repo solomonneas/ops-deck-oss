@@ -19,3 +19,8 @@ prompt-library/data/runtime/
 code-search/data/runtime/
 
 .venv/
+
+# Claude Code session files (never commit)
+.claude/
+.codex/
+.learnings/
