@@ -1,0 +1,26 @@
+services:
+  agent-intel:
+    build: ./agent-intel
+    ports:
+      - "8005:8005"
+    environment:
+      - MEMORY_DIR=/workspace/memory
+      - CARDS_DIR=/workspace/memory/cards
+      - REPOS_OVERLAY=/workspace/repos.json
+      - REPO_DETAIL_OVERLAY=/workspace/repos-detail.json
+      - CODEBASE_OVERLAY=/workspace/codebase.json
+      - OPSDECK_API_KEY=${OPSDECK_API_KEY:-}
+      - GH_ENABLED=false  # gh CLI not installed in slim image; flip to true after baking it in
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8005
+    volumes:
+      - ${OPENCLAW_WORKSPACE:-./sample-workspace}:/workspace:ro
+
+  ui:
+    build: ./ui
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_SIDECAR_BASE_URL=http://localhost:8005
+      - VITE_OPSDECK_API_KEY=${OPSDECK_API_KEY:-}
+    depends_on:
+      - agent-intel

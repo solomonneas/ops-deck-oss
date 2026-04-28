@@ -19,26 +19,21 @@ if not API_KEY:
     logger.warning("OPSDECK_API_KEY is not set. Dev Journal API authentication is disabled.")
 
 BIND_HOST = os.environ.get("BIND_HOST", "127.0.0.1")
-MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "/home/clawdbot/.openclaw/workspace/memory"))
-CARDS_DIR = Path(os.environ.get("CARDS_DIR", "/home/clawdbot/.openclaw/workspace/memory/cards"))
-REPOS_OVERLAY = Path(os.environ.get("REPOS_OVERLAY", "/home/clawdbot/repos/ops-deck-oss/repos.json"))
-REPO_DETAIL_OVERLAY = Path(os.environ.get(
-    "REPO_DETAIL_OVERLAY",
-    "/home/clawdbot/repos/ops-deck-oss/repos-detail.json",
-))
-CODEBASE_OVERLAY = Path(os.environ.get(
-    "CODEBASE_OVERLAY",
-    "/home/clawdbot/repos/ops-deck-oss/codebase.json",
-))
+MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "./workspace/memory"))
+CARDS_DIR = Path(os.environ.get("CARDS_DIR", "./workspace/memory/cards"))
+REPOS_OVERLAY = Path(os.environ.get("REPOS_OVERLAY", "./workspace/repos.json"))
+REPO_DETAIL_OVERLAY = Path(os.environ.get("REPO_DETAIL_OVERLAY", "./workspace/repos-detail.json"))
+CODEBASE_OVERLAY = Path(os.environ.get("CODEBASE_OVERLAY", "./workspace/codebase.json"))
 GH_CACHE_TTL = int(os.environ.get("GH_CACHE_TTL_SECONDS", "600"))
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 CACHE_TTL_SECONDS = 30
 CODE_SEARCH_PORT = int(os.environ.get("CODE_SEARCH_PORT", "5204"))
 PROMPT_LIBRARY_PORT = int(os.environ.get("PROMPT_LIBRARY_PORT", "5202"))
 _ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:8005",
-    "http://opsdeck.local",
+    o.strip() for o in os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://localhost:8005",
+    ).split(",") if o.strip()
 ]
 
 
