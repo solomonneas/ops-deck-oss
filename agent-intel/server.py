@@ -168,8 +168,11 @@ def get_all_entries() -> list[dict]:
     return entries
 
 
+SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
 def _parse_card(filepath: Path) -> dict:
-    text = filepath.read_text()
+    text = filepath.read_text(encoding="utf-8")
     frontmatter: dict = {}
     body = text
     if text.startswith("---\n"):
@@ -180,11 +183,14 @@ def _parse_card(filepath: Path) -> dict:
             except yaml.YAMLError:
                 frontmatter = {}
             body = text[end + 5 :]
+    # Frontmatter values can be bare keys (e.g. `tags:`), which YAML parses to
+    # None. Coerce to the documented defaults so downstream consumers don't
+    # have to defend against null in fields they expect to be lists/strings.
     return {
         "slug": filepath.stem,
-        "topic": frontmatter.get("topic", filepath.stem),
-        "category": frontmatter.get("category", ""),
-        "tags": frontmatter.get("tags", []),
+        "topic": frontmatter.get("topic") or filepath.stem,
+        "category": frontmatter.get("category") or "",
+        "tags": frontmatter.get("tags") or [],
         "body": body,
     }
 
@@ -192,11 +198,18 @@ def _parse_card(filepath: Path) -> dict:
 def _list_cards() -> list[dict]:
     if not CARDS_DIR.exists():
         return []
-    cards = [_parse_card(p) for p in sorted(CARDS_DIR.glob("*.md"))]
+    cards: list[dict] = []
+    for p in sorted(CARDS_DIR.glob("*.md")):
+        try:
+            cards.append(_parse_card(p))
+        except Exception as exc:
+            logger.exception("Failed to parse memory card %s: %s", p, exc)
     return [{k: v for k, v in c.items() if k != "body"} for c in cards]
 
 
 def _get_card(slug: str) -> dict | None:
+    if not SLUG_PATTERN.match(slug):
+        return None
     target = CARDS_DIR / f"{slug}.md"
     if not target.exists():
         return None
