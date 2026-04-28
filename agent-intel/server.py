@@ -323,6 +323,10 @@ def _merge_repos() -> list[dict]:
 
 
 def _load_repo_detail(slug: str) -> dict | None:
+    # Slug validation lives in the helper (matches _get_card precedent) so the
+    # helper is safe to call from anywhere, not just from a pre-validated route.
+    if not SLUG_PATTERN.match(slug):
+        return None
     # Read overlay path at call time so tests can re-point it via monkeypatch
     # without forcing a server reload, matching the GH_ENABLED pattern. Falls
     # back to module-level REPO_DETAIL_OVERLAY otherwise.
@@ -383,8 +387,6 @@ def list_repos(_auth: None = Depends(require_api_key)):
 
 @app.get("/api/repos/{slug}")
 def get_repo_detail(slug: str, _auth: None = Depends(require_api_key)):
-    if not SLUG_PATTERN.match(slug):
-        raise HTTPException(status_code=404, detail="repo detail not found")
     detail = _load_repo_detail(slug)
     if detail is None:
         raise HTTPException(status_code=404, detail="repo detail not found")
