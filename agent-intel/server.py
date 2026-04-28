@@ -118,12 +118,6 @@ def summarize_entry(entry: dict) -> dict:
 
 
 
-def invalidate_entries_cache() -> None:
-    _entries_cache["entries"] = []
-    _entries_cache["expires_at"] = 0.0
-
-
-
 def parse_entry(filepath: Path) -> dict:
     raw = filepath.read_text(encoding="utf-8")
     date_str = filepath.stem
@@ -343,6 +337,7 @@ def _load_repo_detail(slug: str) -> dict | None:
         logger.warning("Failed to parse repo detail overlay %s: %s", overlay_path, exc)
         return None
     if not isinstance(raw, dict):
+        logger.warning("Repo detail overlay %s root is not a dict; ignoring", overlay_path)
         return None
     entry = raw.get(slug)
     if not isinstance(entry, dict):
@@ -417,12 +412,6 @@ def get_repo_detail(slug: str, _auth: None = Depends(require_api_key)):
 @app.get("/api/codebase")
 def list_codebase(_auth: None = Depends(require_api_key)):
     return _load_codebase()
-
-
-@app.post("/api/cache/invalidate")
-def invalidate_cache(_auth: None = Depends(require_api_key)):
-    invalidate_entries_cache()
-    return {"status": "ok"}
 
 
 @app.get("/api/health")
