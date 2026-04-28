@@ -2,6 +2,7 @@
 import logging
 import os
 import re
+import socket
 import time
 from pathlib import Path
 
@@ -18,11 +19,22 @@ BIND_HOST = os.environ.get("BIND_HOST", "127.0.0.1")
 MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "/home/clawdbot/.openclaw/workspace/memory"))
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 CACHE_TTL_SECONDS = 30
+CODE_SEARCH_PORT = int(os.environ.get("CODE_SEARCH_PORT", "5204"))
+PROMPT_LIBRARY_PORT = int(os.environ.get("PROMPT_LIBRARY_PORT", "5202"))
 _ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:8005",
     "http://opsdeck.local",
 ]
+
+
+def _probe_port(port: int, host: str = "127.0.0.1", timeout: float = 0.2) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
 
 TAG_RULES = [
     (["push", "commit", "repo", "git", "merge", "branch"], "build"),
@@ -187,6 +199,27 @@ def health():
     if MEMORY_DIR.exists():
         entry_count = sum(1 for f in MEMORY_DIR.iterdir() if DATE_PATTERN.match(f.name))
     return {"status": "ok", "entryCount": entry_count}
+
+
+@app.get("/healthz")
+def healthz():
+    """Unauthenticated boot probe for the UI adapter selector.
+
+    Returns reachability of optional ops-deck-lite services. Mirrors
+    /api/health's no-auth posture - both must be reachable before the UI has
+    any credential to send.
+    """
+    return {
+        "ok": True,
+        "capabilities": {
+            "journal": True,
+            "memory": True,
+            "repos": True,
+            "codebase": True,
+            "search": _probe_port(CODE_SEARCH_PORT),
+            "prompts": _probe_port(PROMPT_LIBRARY_PORT),
+        },
+    }
 
 
 if __name__ == "__main__":
