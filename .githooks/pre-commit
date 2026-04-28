@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Two-layer pre-commit guard:
+#   Layer 1: Content Guard's default rule scan over staged files.
+#   Layer 2: project-specific hostname / IP / school-affiliation grep
+#            (until upstream Content Guard supports the .content-guard.yml
+#            extra_patterns overlay).
+#
+# Dependencies: jq, grep -P (PCRE), python3, content-guard checked out locally.
+# Override CG_SRC if Content Guard lives somewhere other than the default
+# (e.g. export CG_SRC=$HOME/code/content-guard/src).
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+CG_SRC="${CG_SRC:-$HOME/repos/content-guard/src}"
+if [ ! -d "$CG_SRC" ]; then
+  echo "Content Guard source not found at $CG_SRC."
+  echo "Set CG_SRC env var to your local content-guard checkout (the dir containing content_guard/)."
+  exit 1
+fi
+
+# === Layer 1: Content Guard default rule scan over staged files ===
+PYTHONPATH="$CG_SRC" python3 -m content_guard.git_scan --staged --json > /tmp/cg-staged.json
+if jq -e '.blocked == true' /tmp/cg-staged.json > /dev/null 2>&1; then
+  echo ""
+  echo "Content Guard BLOCKED commit. Findings:"
+  jq '.files' /tmp/cg-staged.json
+  echo ""
+  exit 1
+fi
+
+# === Layer 2: project-specific block ===
+# Patterns live in .githooks/project-blocks.txt (one PCRE alternative per line,
+# blank/# lines ignored). Files exempt from the layer-2 scan: the patterns file
+# itself and the hook scripts (which contain the regex by definition).
+BLOCK_FILE="$REPO_ROOT/.githooks/project-blocks.txt"
+EXEMPT_PATHS=(
+  ".githooks/project-blocks.txt"
+  ".githooks/pre-commit"
+  ".githooks/commit-msg"
+  ".content-guard.yml"
+)
+
+if [ -f "$BLOCK_FILE" ]; then
+  PROJECT_BLOCK_RE="$(grep -Ev '^\s*(#|$)' "$BLOCK_FILE" | paste -sd '|' -)"
+
+  # Build the list of staged files that ARE subject to layer-2 scanning.
+  mapfile -t STAGED_FILES < <(git diff --cached --name-only --diff-filter=AM)
+  SCANNED_FILES=()
+  for f in "${STAGED_FILES[@]}"; do
+    skip=0
+    for ex in "${EXEMPT_PATHS[@]}"; do
+      [ "$f" = "$ex" ] && { skip=1; break; }
+    done
+    [ "$skip" -eq 0 ] && SCANNED_FILES+=("$f")
+  done
+
+  if [ "${#SCANNED_FILES[@]}" -gt 0 ] && [ -n "$PROJECT_BLOCK_RE" ]; then
+    STAGED_ADDITIONS="$(git diff --cached --diff-filter=AM -- "${SCANNED_FILES[@]}" \
+      | grep -E '^\+[^+]' | sed 's/^+//' || true)"
+    if [ -n "$STAGED_ADDITIONS" ]; then
+      if echo "$STAGED_ADDITIONS" | grep -nP "$PROJECT_BLOCK_RE" > /tmp/cg-project-blocks.txt 2>/dev/null; then
+        echo ""
+        echo "Project-specific Content Guard rules BLOCKED commit. Forbidden tokens in staged additions:"
+        cat /tmp/cg-project-blocks.txt
+        echo ""
+        echo "(Hostnames, home LAN IPs, USF refs, and personal identifiers are blocked from this public repo.)"
+        echo "(Patterns: .githooks/project-blocks.txt)"
+        exit 1
+      fi
+    fi
+  fi
+fi
+
+exit 0

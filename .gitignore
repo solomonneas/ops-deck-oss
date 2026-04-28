@@ -24,3 +24,18 @@ code-search/data/runtime/
 .claude/
 .codex/
 .learnings/
+
+# Local git worktrees
+.worktrees/
+
+# Editor / OS
+*.swp
+
+# Local data overlays (users add their own; not for the public repo)
+/repos.json
+/repos-detail.json
+/codebase.json
+
+# Test artifacts
+/tmp/cg-*.json
+

@@ -1,107 +1,93 @@
-# Ops Deck OSS
+# ops-deck-oss
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![React](https://img.shields.io/badge/UI-React%20%2B%20Vite-61DAFB)
-![Express](https://img.shields.io/badge/API-Express-111827)
-![FastAPI](https://img.shields.io/badge/Search-FastAPI-009688)
-![Docker Compose](https://img.shields.io/badge/Infra-Docker%20Compose-2496ED)
+Self-hosted operational dashboard for OpenClaw users. A better ops page than the default `openclaw dashboard`.
 
-Ops Deck OSS is a self-hosted operations dashboard for AI agent infrastructure. It includes a polished dark UI, seeded generic data, an Express telemetry API, a FastAPI code-search service with SQLite + Ollama embeddings (with graceful fallback), and a persistent prompt library.
+## What you get
 
-## Features
+Eight pages out of the box:
 
-- **8-panel dashboard** built with React + Vite + Tailwind:
-  - Dashboard, Cron Calendar, Intel Feed, Security, Infrastructure, Code Search, Prompts, Backlog
-- **Ops Deck API (Express)** with JSON-backed endpoints:
-  - `/api/cron-jobs`, `/api/agent-intel`, `/api/agents/intel`, `/api/security-audit`, `/api/architecture`, `/api/backlog`, `/api/health`
-- **Code Search (FastAPI)**:
-  - `/api/search`, `/api/index`, `/api/health`
-  - SQLite index + optional Ollama embeddings via `qwen3-embedding:8b`
-- **Prompt Library (Express CRUD)**:
-  - `/api/prompts`, `/api/prompts/:id`
-- **Docker Compose stack** for `ui`, `api`, `code-search`, `prompt-library`, and `ollama`
-- **Public-safe example data** only (no personal/private data, credentials, or real infrastructure identifiers)
+- **Repos** - your GitHub repos with category/featured annotations
+- **RepoDetail** - per-repo deep dives (architecture, tech, code snippets)
+- **Codebase** - semantic codebase summaries
+- **Search** - semantic code search (requires `ops-deck-lite` skill)
+- **Prompts** - prompt library (requires `ops-deck-lite` skill)
+- **Journal** - daily session journal from `~/.openclaw/workspace/memory/YYYY-MM-DD.md`
+- **Memory** - browse `~/.openclaw/workspace/memory/cards/`
+- **Config** - dashboard settings and resolved env vars
 
-## Repository Layout
-
-```text
-ops-deck-oss/
-├── api/
-├── code-search/
-├── docs/
-│   ├── pm2-setup.md
-│   └── screenshots/
-├── prompt-library/
-├── ui/
-├── .env.example
-├── docker-compose.yml
-├── LICENSE
-└── README.md
-```
-
-## Quick Start
+## Quick start
 
 ```bash
-git clone https://github.com/your-username/ops-deck-oss.git
+git clone https://github.com/solomonneas/ops-deck-oss.git
 cd ops-deck-oss
 cp .env.example .env
 docker compose up -d
-
-# First time only
-docker compose exec ollama ollama pull qwen3-embedding:8b
 ```
 
-Open:
+Open http://localhost:5173.
 
-- UI: <http://localhost:5173>
-- API: <http://localhost:8005>
-- Prompt Library: <http://localhost:5202>
-- Code Search: <http://localhost:5204>
-- Ollama: <http://localhost:11434>
+The `agent-intel` sidecar mounts `$OPENCLAW_WORKSPACE` read-only (defaults to the bundled `./sample-workspace` so the demo works on first run). Set `OPENCLAW_WORKSPACE=$HOME/.openclaw/workspace` in `.env` to point at your own.
 
-## Local Development
+## Architecture
 
-```bash
-# Terminal 1
-cd api && npm install && npm run dev
-
-# Terminal 2
-cd prompt-library && npm install && npm run dev
-
-# Terminal 3
-cd code-search
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 5204
-
-# Terminal 4
-cd ui && npm install && npm run dev
+```
+ui (port 5173)   ─── DataSource interface
+                      ├── sidecar adapter (default)  ── agent-intel (port 8005)
+                      └── openclaw-only adapter      ── empty stub (v1)
 ```
 
-Vite UI environment variables:
+The UI auto-selects the sidecar adapter when `agent-intel` is reachable on `/healthz`. Search and Prompts are optional; they hit the `ops-deck-lite` clawhub skill (separate install) when running.
 
-- `VITE_API_BASE_URL`
-- `VITE_PROMPT_LIBRARY_BASE_URL`
-- `VITE_CODE_SEARCH_BASE_URL`
+## Bring your own data
 
-## Screenshots
+Three optional overlay files extend what the sidecar serves:
 
-![Dashboard preview](./docs/screenshots/dashboard-preview.svg)
-![Prompts and search preview](./docs/screenshots/prompts-search-preview.svg)
+| File | Path | Purpose |
+|---|---|---|
+| `repos.json` | `$OPENCLAW_WORKSPACE/repos.json` | Adds `category`/`featured` to your `gh repo list` output. |
+| `repos-detail.json` | `$OPENCLAW_WORKSPACE/repos-detail.json` | Per-repo deep-dive content. Shape: `{ slug: { name, summary, tech, diagrams, ... } }`. |
+| `codebase.json` | `$OPENCLAW_WORKSPACE/codebase.json` | Semantic codebase entries: `[ { path, summary, language } ]`. |
 
-## Example Data Included
+Without these, the corresponding pages render with empty/skeleton state.
 
-- Cron schedules with mixed healthy/warning/degraded states
-- Security controls and findings
-- Intel feed across multiple categories
-- Architecture map and service flows
-- Backlog tasks across status lanes
-- Seed prompt templates
-- Search corpus documents for out-of-the-box query results
+## Companion: ops-deck-lite
 
-## Notes
+For semantic code search and the prompt library, install the `ops-deck-lite` clawhub skill alongside this repo. The UI auto-detects them on ports 5204 and 5202.
 
-- Code search automatically falls back to deterministic local embeddings if Ollama/model is unavailable.
-- Prompt persistence uses a Docker volume (`prompt-library-data`).
-- Non-Docker process management guidance is in [`docs/pm2-setup.md`](./docs/pm2-setup.md).
+## Configuration
+
+Build-time env vars (UI), all `VITE_*`-prefixed, are baked into the bundle at `npm run build`:
+
+| Var | Default | Purpose |
+|---|---|---|
+| `VITE_SIDECAR_BASE_URL` | `http://localhost:8005` | agent-intel sidecar |
+| `VITE_SEARCH_BASE_URL` | `http://localhost:5204` | optional code-search service |
+| `VITE_PROMPTS_BASE_URL` | `http://localhost:5202` | optional prompt-library service |
+| `VITE_OPSDECK_API_KEY` | (unset) | shared secret with the sidecar |
+| `VITE_OPSDECK_HOST_IP` | (page hostname) | host for in-app links to running services |
+
+Runtime env vars (sidecar):
+
+| Var | Default | Purpose |
+|---|---|---|
+| `MEMORY_DIR` | `./workspace/memory` | journal markdown files |
+| `CARDS_DIR` | `./workspace/memory/cards` | memory cards |
+| `REPOS_OVERLAY` | `./workspace/repos.json` | repo annotations |
+| `REPO_DETAIL_OVERLAY` | `./workspace/repos-detail.json` | per-repo deep dives |
+| `CODEBASE_OVERLAY` | `./workspace/codebase.json` | codebase entries |
+| `OPSDECK_API_KEY` | (unset) | required `X-API-Key` if set |
+| `GH_ENABLED` | `true` | calls `gh repo list` for live repo data |
+| `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:8005` | CORS allowlist (comma-separated) |
+| `BIND_HOST` | `127.0.0.1` | only used if running `python server.py` directly (not uvicorn) |
+
+## Contributing
+
+PRs welcome. The repo is gated by [Content Guard](https://github.com/solomonneas/content-guard) at three layers: pre-commit hook, CI scan, and PR-create wrapper. Run `bash scripts/install-hooks.sh` after cloning.
+
+For PRs, use `bash scripts/pr-create.sh "title" body.md` so the body gets sanitized before publishing.
+
+The pre-commit hook uses `grep -P` (PCRE), which is GNU grep on Linux. macOS users with BSD grep should install GNU grep (`brew install grep` and use `ggrep` or alias).
+
+## License
+
+MIT. See `LICENSE`.

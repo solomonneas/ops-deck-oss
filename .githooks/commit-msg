@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# commit-msg guard. Two checks:
+#   1. AI-attribution Co-Authored-By trailers (blocks any AI assistant trailer).
+#   2. Project-specific hostnames / home LAN IPs / school references / personal
+#      identifiers in the commit message body. Patterns loaded from
+#      .githooks/project-blocks.txt (one PCRE alternative per line).
+#
+# Note: Content Guard's git_commits module only operates on existing commits
+# (--range or --all), so it cannot scan a pre-commit message file. We run that
+# scan in CI (Task 18) over origin/main..HEAD instead. The local commit-msg
+# hook just enforces the high-value cases inline.
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+COMMIT_MSG_FILE="$1"
+
+# === AI Co-Authored-By trailer block ===
+if grep -iqE '^[Cc]o-[Aa]uthored-[Bb]y:.*(claude|anthropic|openai|codex|gpt|copilot|\bai\b)' "$COMMIT_MSG_FILE"; then
+  echo ""
+  echo "BLOCKED: commit message contains an AI Co-Authored-By trailer."
+  echo "Remove the trailer (no AI/Claude/Anthropic/OpenAI/Codex/Copilot attribution) and recommit."
+  exit 1
+fi
+
+# === Project-specific block ===
+BLOCK_FILE="$REPO_ROOT/.githooks/project-blocks.txt"
+if [ -f "$BLOCK_FILE" ]; then
+  PROJECT_BLOCK_RE="$(grep -Ev '^\s*(#|$)' "$BLOCK_FILE" | paste -sd '|' -)"
+  if [ -n "$PROJECT_BLOCK_RE" ]; then
+    if grep -nP "$PROJECT_BLOCK_RE" "$COMMIT_MSG_FILE" > /tmp/cg-msg-project-blocks.txt 2>/dev/null; then
+      echo ""
+      echo "Project-specific Content Guard rules BLOCKED commit message. Forbidden tokens:"
+      cat /tmp/cg-msg-project-blocks.txt
+      echo ""
+      echo "(Hostnames, home LAN IPs, USF refs, and personal identifiers are blocked from this public repo.)"
+      echo "(Patterns: .githooks/project-blocks.txt)"
+      exit 1
+    fi
+  fi
+fi
+
+exit 0

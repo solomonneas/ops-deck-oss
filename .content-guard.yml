@@ -1,0 +1,25 @@
+extra_patterns:
+  - name: user_hostnames
+    regex: '\b(Rocinante|Gandalf|Hogwarts|gandalf|hogwarts|rocinante|clawdbot|solomon|srnea)\b'
+    severity: block
+    note: "Solomon's machine names. Public repo must not reference them."
+
+  - name: home_lan_ip
+    regex: '192\.168\.4\.\d{1,3}'
+    severity: block
+    note: "Home LAN IP range. Block on any commit/PR."
+
+  - name: usf_refs
+    regex: '\bUSF\b|university of south florida'
+    severity: block
+    note: "School affiliation. Strip from public repo."
+
+  - name: openclaw_user_path
+    regex: '/home/clawdbot(?!/repos/ops-deck-oss)'
+    severity: warn
+    note: "Specific home dir path. ~/.openclaw paths are common in docs (warn, not block)."
+
+  - name: workspace_paths
+    regex: '~/\.openclaw/workspace/(pipeline|agents|state)'
+    severity: warn
+    note: "Internal OpenClaw paths. Mention in docs is OK (warn)."
