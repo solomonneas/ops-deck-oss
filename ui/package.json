@@ -1,29 +1,47 @@
 {
-  "name": "ops-deck-ui",
-  "version": "1.0.0",
-  "private": true,
+  "name": "opsdeck-ui",
+  "private": false,
+  "version": "0.1.0",
+  "description": "Public template UI for the opsdeck dashboard.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solomonneas/ops-deck-oss"
+  },
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5173",
+    "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4173"
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest --run"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.1.18",
     "lucide-react": "^0.511.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-router-dom": "^7.5.0",
-    "recharts": "^2.15.1"
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.6.1",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.5.3",
-    "tailwindcss": "^3.4.17",
-    "typescript": "~5.7.2",
-    "vite": "^6.2.0"
+    "@eslint/js": "^9.39.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "jsdom": "^28.1.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4",
+    "vitest": "^4.0.18"
   }
 }
-

@@ -1,0 +1,64 @@
+name: content-guard
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Content Guard
+        run: pip install content-guard
+      - name: Scan all tracked files (CG default rules)
+        run: |
+          python3 -m content_guard.git_scan --all-tracked --json > cg-result.json
+          python3 -c "import json,sys; d=json.load(open('cg-result.json')); blocks=[f for f in d.get('findings',[]) if f.get('severity')=='block']; print('blocks:', len(blocks)); [print(' ', f) for f in blocks[:20]]; sys.exit(1 if blocks else 0)"
+      - name: Scan tracked files for project-specific blocks
+        run: |
+          # Read the patterns from .githooks/project-blocks.txt - same source the
+          # pre-commit hook uses locally, so CI behavior matches developer behavior.
+          if [ ! -f .githooks/project-blocks.txt ]; then
+            echo "Missing .githooks/project-blocks.txt"; exit 1
+          fi
+          # Build a single PCRE alternation from the pattern file (skip blank/# lines).
+          PATTERN="$(grep -vE '^\s*(#|$)' .githooks/project-blocks.txt | paste -sd '|' -)"
+          if [ -z "$PATTERN" ]; then
+            echo "No patterns to enforce"; exit 0
+          fi
+          # Scan all tracked files. Exempt the pattern file and the hooks themselves.
+          # .content-guard.yml legitimately contains the regex literals it
+          # defines, so it's exempt for the same reason the pattern file is.
+          MATCHES="$(git ls-files \
+            | grep -vE '^\.githooks/(project-blocks\.txt|pre-commit|commit-msg)$|^\.content-guard\.yml$' \
+            | xargs -I{} grep -nP -H "$PATTERN" {} 2>/dev/null || true)"
+          if [ -n "$MATCHES" ]; then
+            echo "Project-specific Content Guard rules BLOCKED:"
+            echo "$MATCHES"
+            exit 1
+          fi
+      - name: Scan commit messages on this PR
+        if: github.event_name == 'pull_request'
+        run: |
+          # Use --range to scan only the commits in this PR.
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" || true
+          python3 -m content_guard.git_commits --range "${BASE}..HEAD" --json > cg-msgs.json || true
+          python3 -c "import json,sys; d=json.load(open('cg-msgs.json')); blocks=[f for f in d.get('findings',[]) if f.get('severity')=='block']; print('blocks:', len(blocks)); [print(' ', f) for f in blocks[:20]]; sys.exit(1 if blocks else 0)"
+      - name: Block AI Co-Authored-By trailers in PR commits
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" || true
+          if git log --format=%B "${BASE}..HEAD" | grep -iqE '\bco-authored-by:.*?(claude|anthropic|openai|codex|gpt|ai)'; then
+            echo "BLOCKED: PR commit messages contain AI Co-Authored-By trailer."
+            exit 1
+          fi
