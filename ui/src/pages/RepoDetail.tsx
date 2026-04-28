@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -7,8 +8,9 @@ import {
   Globe,
   Lock,
 } from 'lucide-react';
-import { REPOS } from '../data/repos';
-import { REPO_DETAILS, type RepoDetailData, type DiagramLayer, type DataFlowStep, type CodeSnippet, type TechDecision, type ApiEndpoint } from '../data/repos-detail';
+import { type Repo } from '../data/repos';
+import { type RepoDetailData, type DiagramLayer, type DataFlowStep, type CodeSnippet, type TechDecision, type ApiEndpoint } from '../data/repos-detail';
+import { useDataSource } from '../data-sources/useDataSource';
 
 // Host for in-app links to running services. Defaults to the current page
 // host (so the link resolves wherever the dashboard is being viewed from);
@@ -177,9 +179,42 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export default function RepoDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const ds = useDataSource();
+  const [repo, setRepo] = useState<Repo | null>(null);
+  const [detail, setDetail] = useState<RepoDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [, setError] = useState<Error | null>(null);
 
-  const repo = REPOS.find((r) => r.slug === slug);
-  const detail = slug ? REPO_DETAILS[slug] : undefined;
+  useEffect(() => {
+    if (!slug) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([ds.getRepos(), ds.getRepoDetail(slug)])
+      .then(([repos, d]) => {
+        setRepo(repos.find((r) => r.slug === slug) ?? null);
+        setDetail(d);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e);
+        setLoading(false);
+      });
+  }, [ds, slug]);
+
+  if (loading) {
+    return (
+      <div className="animate-fadeIn min-h-full" style={{ backgroundColor: '#0a0a14' }}>
+        <Link to="/repos" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white mb-6">
+          <ArrowLeft size={14} /> Back to Repos
+        </Link>
+        <div className="text-center py-20">
+          <div className="text-lg text-gray-500">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!repo || !detail) {
     return (

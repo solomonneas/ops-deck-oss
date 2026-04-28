@@ -1,59 +1,15 @@
-import { useState, useEffect } from 'react';
-import { useApi, apiFetch } from '../hooks/useApi';
+import { useState } from 'react';
+import { useDataSource } from '../data-sources/useDataSource';
+import type { SearchResult } from '../data-sources/types';
 import { Search as SearchIcon, Code2, FileText, ChevronDown, ChevronRight } from 'lucide-react';
 
-interface SearchResult {
-  score: number;
-  file_path: string;
-  project: string;
-  chunk_type: string;
-  summary: string;
-  content: string;
-}
-
-interface SearchResponse {
-  results: SearchResult[];
-}
-
-interface ProjectStats {
-  files: number;
-  lines: number;
-  languages: Record<string, number>;
-}
-
-interface StatsResponse {
-  projects: Record<string, ProjectStats>;
-  totals: {
-    files: number;
-    lines: number;
-    languages: Record<string, number>;
-  };
-}
-
-const PROJECT_COLORS: Record<string, string> = {
-  'openclaw': '#7c5cfc',
-  'dev-dashboard': '#3b82f6',
-  'mcp-server': '#22c55e',
-  'prompt-library': '#eab308',
-  'social-showcase': '#ec4899',
-};
-
-const CHUNK_TYPE_LABELS: Record<string, string> = {
-  function: 'Function',
-  class: 'Class',
-  template: 'Template',
-  component: 'Component',
-  config: 'Config',
-  doc: 'Documentation',
-};
-
 export default function Search() {
+  const ds = useDataSource();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
-  const { data: stats } = useApi<StatsResponse>('/api/search/stats');
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,13 +18,10 @@ export default function Search() {
     setLoading(true);
     setError(null);
     setExpandedResults(new Set());
-    
+
     try {
-      const data = await apiFetch<SearchResponse>('/api/code-search', {
-        method: 'POST',
-        body: JSON.stringify({ query: query.trim() }),
-      });
-      setResults(data.results || []);
+      const data = await ds.searchCode(query.trim(), { limit: 25 });
+      setResults(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
       setResults([]);
@@ -84,12 +37,6 @@ export default function Search() {
       else next.add(index);
       return next;
     });
-  };
-
-  const formatNumber = (n: number): string => {
-    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-    return String(n);
   };
 
   return (
@@ -121,71 +68,6 @@ export default function Search() {
         </div>
       </form>
 
-      {/* Stats Section */}
-      {stats && (
-        <div className="mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="bg-[#16162a] border border-dashed border-white/10 rounded-xl p-4 hover:border-[#7c5cfc]/30 hover:shadow-[0_0_20px_rgba(124,92,252,0.08)] transition-all">
-              <div className="flex items-center gap-3">
-                <FileText size={18} className="text-[#7c5cfc]" />
-                <div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Total Files</div>
-                  <div className="text-lg font-bold text-white font-mono">{formatNumber(stats.totals.files)}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-[#16162a] border border-dashed border-white/10 rounded-xl p-4 hover:border-[#7c5cfc]/30 hover:shadow-[0_0_20px_rgba(124,92,252,0.08)] transition-all">
-              <div className="flex items-center gap-3">
-                <Code2 size={18} className="text-[#7c5cfc]" />
-                <div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Lines of Code</div>
-                  <div className="text-lg font-bold text-white font-mono">{formatNumber(stats.totals.lines)}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-[#16162a] border border-dashed border-white/10 rounded-xl p-4 hover:border-[#7c5cfc]/30 hover:shadow-[0_0_20px_rgba(124,92,252,0.08)] transition-all">
-              <div className="flex items-center gap-3">
-                <SearchIcon size={18} className="text-[#7c5cfc]" />
-                <div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider">Projects</div>
-                  <div className="text-lg font-bold text-white font-mono">{Object.keys(stats.projects).length}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Per-project breakdown */}
-          <div className="bg-[#16162a] border border-dashed border-white/10 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Projects</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries(stats.projects).map(([name, proj]) => {
-                const color = PROJECT_COLORS[name] || '#6b7280';
-                return (
-                  <div key={name} className="bg-white/5 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                      <span className="text-sm font-medium text-white">{name}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-[10px]">
-                      <div>
-                        <span className="text-gray-500">Files:</span>
-                        <span className="text-white ml-1 font-mono">{proj.files}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Lines:</span>
-                        <span className="text-white ml-1 font-mono">{formatNumber(proj.lines)}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Results */}
       {error && (
         <div className="bg-[#ef4444]/10 border border-dashed border-[#ef4444]/30 rounded-xl p-4 text-center text-[#ef4444] text-sm">
@@ -210,8 +92,7 @@ export default function Search() {
             <div className="min-w-full space-y-3">
               {results.map((result, idx) => {
                 const isExpanded = expandedResults.has(idx);
-                const color = PROJECT_COLORS[result.project] || '#6b7280';
-                
+
                 return (
                   <div
                     key={idx}
@@ -224,21 +105,9 @@ export default function Search() {
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <FileText size={14} className="text-gray-500 shrink-0" />
-                        <span className="text-sm font-mono text-white truncate">{result.file_path}</span>
+                        <span className="text-sm font-mono text-white truncate">{result.path}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 shrink-0 sm:ml-4">
-                        <span
-                          className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: color + '20',
-                            color: color,
-                          }}
-                        >
-                          {result.project}
-                        </span>
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 text-gray-400">
-                          {CHUNK_TYPE_LABELS[result.chunk_type] || result.chunk_type}
-                        </span>
                         <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#7c5cfc]/15 text-[#7c5cfc]">
                           {(result.score * 100).toFixed(0)}% match
                         </span>
@@ -249,17 +118,17 @@ export default function Search() {
                         )}
                       </div>
                     </div>
-                    
-                    {result.summary && (
-                      <p className="text-xs text-gray-400 leading-relaxed break-words">{result.summary}</p>
+
+                    {result.snippet && !isExpanded && (
+                      <p className="text-xs text-gray-400 leading-relaxed break-words line-clamp-2">{result.snippet}</p>
                     )}
                   </button>
 
-                  {isExpanded && result.content && (
+                  {isExpanded && result.snippet && (
                     <div className="px-5 pb-4">
                       <div className="border-t border-dashed border-white/5 pt-3">
                         <pre className="bg-[#0d0d15] border border-dashed border-white/5 rounded-lg p-3 text-xs text-gray-300 font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap break-words">
-                          {result.content}
+                          {result.snippet}
                         </pre>
                       </div>
                     </div>

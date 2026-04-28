@@ -1,19 +1,7 @@
-import { useState } from 'react';
-import { useApi } from '../hooks/useApi';
+import { useEffect, useState } from 'react';
+import { useDataSource } from '../data-sources/useDataSource';
+import type { JournalEntry } from '../data-sources/types';
 import { Notebook, ChevronDown, ChevronRight, Tag } from 'lucide-react';
-
-interface Section {
-  heading: string;
-  content: string;
-  tags: string[];
-}
-
-interface JournalEntry {
-  date: string;
-  title: string;
-  sections: Section[];
-  rawMarkdown: string;
-}
 
 const TAG_COLORS: Record<string, string> = {
   build: '#3b82f6',
@@ -27,18 +15,27 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 export default function Journal() {
-  const { data, loading } = useApi<JournalEntry[]>('/api/journal');
-  const entries = data ?? [];
-  
+  const ds = useDataSource();
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [, setError] = useState<Error | null>(null);
+
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [filterTag, setFilterTag] = useState<string | null>(null);
 
+  useEffect(() => {
+    setLoading(true);
+    ds.getJournal()
+      .then((d) => { setEntries(d); setLoading(false); })
+      .catch((e) => { setError(e); setLoading(false); });
+  }, [ds]);
+
   const allTags = Array.from(
-    new Set(entries.flatMap(e => e.sections.flatMap(s => s.tags)))
+    new Set(entries.flatMap(e => e.tags))
   ).sort();
 
   const filteredEntries = filterTag
-    ? entries.filter(e => e.sections.some(s => s.tags.includes(filterTag)))
+    ? entries.filter(e => e.tags.includes(filterTag))
     : entries;
 
   const toggleSection = (key: string) => {
@@ -156,8 +153,26 @@ export default function Journal() {
                         <div className="px-5 py-4 border-b border-dashed border-white/5">
                           <div className="flex items-center justify-between">
                             <div>
-                              <h3 className="text-base font-semibold text-white mb-1">{entry.title}</h3>
-                              <p className="text-xs text-gray-500">{formatDate(entry.date)}</p>
+                              <h3 className="text-base font-semibold text-white mb-1">{formatDate(entry.date)}</h3>
+                              {entry.tags.length > 0 && (
+                                <div className="flex items-center gap-1.5 mt-1.5">
+                                  {entry.tags.map(tag => {
+                                    const color = TAG_COLORS[tag] || '#6b7280';
+                                    return (
+                                      <span
+                                        key={tag}
+                                        className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                                        style={{
+                                          backgroundColor: color + '20',
+                                          color: color,
+                                        }}
+                                      >
+                                        {tag}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#7c5cfc]/15 text-[#7c5cfc]">
                               {entry.sections.length} section{entry.sections.length !== 1 ? 's' : ''}
@@ -170,8 +185,9 @@ export default function Journal() {
                           {entry.sections.map((section, sectionIdx) => {
                             const sectionKey = `${entry.date}-${sectionIdx}`;
                             const isExpanded = expandedSections.has(sectionKey);
-                            const preview = section.content.split('\n').slice(0, 2).join('\n');
-                            const hasMore = section.content.split('\n').length > 2;
+                            const content = section.lines.join('\n');
+                            const preview = section.lines.slice(0, 2).join('\n');
+                            const hasMore = section.lines.length > 2;
 
                             return (
                               <div key={sectionIdx} className="px-5 py-4">
@@ -182,7 +198,7 @@ export default function Journal() {
                                   <div className="flex items-center justify-between mb-2">
                                     <h4 className="text-sm font-semibold text-white font-mono flex items-center gap-2">
                                       <span className="text-[#7c5cfc]">$</span>
-                                      {section.heading}
+                                      {section.heading ?? '(no heading)'}
                                     </h4>
                                     {hasMore && (
                                       isExpanded ? (
@@ -192,32 +208,11 @@ export default function Journal() {
                                       )
                                     )}
                                   </div>
-
-                                  {/* Tags */}
-                                  {section.tags.length > 0 && (
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      {section.tags.map(tag => {
-                                        const color = TAG_COLORS[tag] || '#6b7280';
-                                        return (
-                                          <span
-                                            key={tag}
-                                            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                                            style={{
-                                              backgroundColor: color + '20',
-                                              color: color,
-                                            }}
-                                          >
-                                            {tag}
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
                                 </button>
 
                                 {/* Content */}
                                 <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                  {isExpanded ? section.content : preview}
+                                  {isExpanded ? content : preview}
                                   {!isExpanded && hasMore && (
                                     <button
                                       onClick={() => toggleSection(sectionKey)}

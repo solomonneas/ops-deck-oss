@@ -1,7 +1,56 @@
-import { useState, useEffect } from 'react';
-import { useApi, apiFetch } from '../hooks/useApi';
-import { FileText, BookOpen, Shield, Clock, Save, X, Edit3, ChevronDown, ChevronRight, Folder, Package, AlertCircle } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { FileText, Shield, Clock, Save, X, Edit3, ChevronDown, ChevronRight, Folder, Package, AlertCircle } from 'lucide-react';
 import type { CronJob } from '../types';
+import { getApiKey } from '../lib/apiKey';
+
+/* ── Local fetch helpers (Config talks to a host-local config API,
+ *    separate from the DataSource adapter layer) ── */
+
+const CONFIG_API_BASE = (() => {
+  if (typeof window === 'undefined') return 'http://localhost:8005';
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1'
+    ? 'http://localhost:8005'
+    : `http://${host}:8005`;
+})();
+
+function buildHeaders(headers?: HeadersInit): Headers {
+  const merged = new Headers(headers);
+  const apiKey = getApiKey();
+  if (apiKey) merged.set('X-API-Key', apiKey);
+  return merged;
+}
+
+async function configApiGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${CONFIG_API_BASE}${path}`, { headers: buildHeaders() });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json() as Promise<T>;
+}
+
+async function configApiSend(path: string, options: RequestInit): Promise<void> {
+  const headers = buildHeaders(options.headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const res = await fetch(`${CONFIG_API_BASE}${path}`, { ...options, headers });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+}
+
+function useConfigApi<T>(path: string) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    configApiGet<T>(path)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((e: Error) => { setError(e.message); setLoading(false); });
+  }, [path]);
+
+  useEffect(() => { refetch(); }, [refetch]);
+
+  return { data, loading, error, refetch };
+}
 
 /* ── Types ────────────────────────────────────────── */
 
@@ -116,14 +165,14 @@ function FileViewer({ file, content }: { file: string; content: string }) {
 /* ── Files Tab ───────────────────────────────────── */
 
 function FilesTab() {
-  const { data: files, loading, error, refetch } = useApi<ConfigFile[]>('/api/config/files');
+  const { data: files, loading, error, refetch } = useConfigApi<ConfigFile[]>('/api/config/files');
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
   const activeFile = files?.find(f => f.name === selected);
 
   async function handleSave(content: string) {
-    await apiFetch(`/api/config/file?path=${encodeURIComponent(selected!)}`, {
+    await configApiSend(`/api/config/file?path=${encodeURIComponent(selected!)}`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
     });
@@ -200,7 +249,7 @@ function FilesTab() {
 /* ── Skills Tab ──────────────────────────────────── */
 
 function SkillsTab() {
-  const { data: skills, loading, error } = useApi<Skill[]>('/api/config/skills');
+  const { data: skills, loading, error } = useConfigApi<Skill[]>('/api/config/skills');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   if (loading) return <div className="text-gray-500 text-sm animate-pulse">Loading skills...</div>;
@@ -253,14 +302,14 @@ function SkillsTab() {
 /* ── Rules Tab ───────────────────────────────────── */
 
 function RulesTab() {
-  const { data: rules, loading, error, refetch } = useApi<Rule[]>('/api/config/rules');
+  const { data: rules, loading, error, refetch } = useConfigApi<Rule[]>('/api/config/rules');
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
   const activeRule = rules?.find(r => r.name === selected);
 
   async function handleSave(content: string) {
-    await apiFetch(`/api/config/rules/${encodeURIComponent(selected!)}`, {
+    await configApiSend(`/api/config/rules/${encodeURIComponent(selected!)}`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
     });
@@ -330,7 +379,7 @@ function RulesTab() {
 /* ── Crons Tab ───────────────────────────────────── */
 
 function CronsTab() {
-  const { data, loading, error } = useApi<CronApiResponse>('/api/crons');
+  const { data, loading, error } = useConfigApi<CronApiResponse>('/api/crons');
 
   if (loading) return <div className="text-gray-500 text-sm animate-pulse">Loading crons...</div>;
   if (error) return <div className="text-red-400 text-sm">Error: {error}</div>;
