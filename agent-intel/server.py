@@ -26,6 +26,10 @@ REPO_DETAIL_OVERLAY = Path(os.environ.get(
     "REPO_DETAIL_OVERLAY",
     "/home/clawdbot/repos/ops-deck-oss/repos-detail.json",
 ))
+CODEBASE_OVERLAY = Path(os.environ.get(
+    "CODEBASE_OVERLAY",
+    "/home/clawdbot/repos/ops-deck-oss/codebase.json",
+))
 GH_CACHE_TTL = int(os.environ.get("GH_CACHE_TTL_SECONDS", "600"))
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 CACHE_TTL_SECONDS = 30
@@ -346,6 +350,23 @@ def _load_repo_detail(slug: str) -> dict | None:
     return entry
 
 
+def _load_codebase() -> list[dict]:
+    # Read overlay path at call time so tests can re-point it via monkeypatch
+    # without forcing a server reload, matching the established pattern.
+    overlay_path = Path(os.environ.get("CODEBASE_OVERLAY", str(CODEBASE_OVERLAY)))
+    if not overlay_path.exists():
+        return []
+    try:
+        raw = json.loads(overlay_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to parse codebase overlay %s: %s", overlay_path, exc)
+        return []
+    if not isinstance(raw, list):
+        logger.warning("Codebase overlay %s root is not a list; ignoring", overlay_path)
+        return []
+    return [entry for entry in raw if isinstance(entry, dict)]
+
+
 @app.get("/api/entries")
 def list_entries(_auth: None = Depends(require_api_key)):
     return get_all_entries()
@@ -391,6 +412,11 @@ def get_repo_detail(slug: str, _auth: None = Depends(require_api_key)):
     if detail is None:
         raise HTTPException(status_code=404, detail="repo detail not found")
     return detail
+
+
+@app.get("/api/codebase")
+def list_codebase(_auth: None = Depends(require_api_key)):
+    return _load_codebase()
 
 
 @app.post("/api/cache/invalidate")
