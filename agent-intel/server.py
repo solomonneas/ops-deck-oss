@@ -1,8 +1,10 @@
 """Dev Journal API - serves parsed memory markdown files."""
+import json
 import logging
 import os
 import re
 import socket
+import subprocess
 import time
 from pathlib import Path
 
@@ -19,6 +21,8 @@ if not API_KEY:
 BIND_HOST = os.environ.get("BIND_HOST", "127.0.0.1")
 MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "/home/clawdbot/.openclaw/workspace/memory"))
 CARDS_DIR = Path(os.environ.get("CARDS_DIR", "/home/clawdbot/.openclaw/workspace/memory/cards"))
+REPOS_OVERLAY = Path(os.environ.get("REPOS_OVERLAY", "/home/clawdbot/repos/ops-deck-oss/repos.json"))
+GH_CACHE_TTL = int(os.environ.get("GH_CACHE_TTL_SECONDS", "600"))
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 CACHE_TTL_SECONDS = 30
 CODE_SEARCH_PORT = int(os.environ.get("CODE_SEARCH_PORT", "5204"))
@@ -47,6 +51,7 @@ TAG_RULES = [
 ]
 
 _entries_cache = {"expires_at": 0.0, "entries": []}
+_repos_cache = {"expires_at": 0.0, "data": []}
 
 app = FastAPI(title="Dev Journal API")
 app.add_middleware(
@@ -216,6 +221,75 @@ def _get_card(slug: str) -> dict | None:
     return _parse_card(target)
 
 
+def _load_overlay() -> dict[str, dict]:
+    if not REPOS_OVERLAY.exists():
+        return {}
+    try:
+        raw = json.loads(REPOS_OVERLAY.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(raw, list):
+        return {}
+    return {entry["name"]: entry for entry in raw if isinstance(entry, dict) and "name" in entry}
+
+
+def _fetch_gh_repos() -> list[dict]:
+    # Read GH_ENABLED at call time so tests (and operators flipping the env
+    # between requests) don't get pinned to whatever was set at import.
+    if os.environ.get("GH_ENABLED", "true").lower() != "true":
+        return []
+    if _repos_cache["expires_at"] > time.time():
+        return _repos_cache["data"]
+    try:
+        result = subprocess.run(
+            ["gh", "repo", "list", "--limit", "200", "--json",
+             "name,description,url,visibility,pushedAt,isArchived"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return []
+        data = json.loads(result.stdout)
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return []
+    _repos_cache["data"] = data
+    _repos_cache["expires_at"] = time.time() + GH_CACHE_TTL
+    return data
+
+
+def _merge_repos() -> list[dict]:
+    overlay = _load_overlay()
+    gh_data = _fetch_gh_repos()
+    by_name: dict[str, dict] = {}
+    for entry in gh_data:
+        name = entry["name"]
+        by_name[name] = {
+            "name": name,
+            "description": entry.get("description") or "",
+            "url": entry.get("url") or "",
+            "visibility": entry.get("visibility") or "PUBLIC",
+            "pushedAt": entry.get("pushedAt") or "",
+            "isArchived": entry.get("isArchived", False),
+            "category": "",
+            "featured": False,
+        }
+    for name, ov in overlay.items():
+        if name not in by_name:
+            by_name[name] = {
+                "name": name,
+                "description": ov.get("description", ""),
+                "url": ov.get("url", ""),
+                "visibility": ov.get("visibility", "PUBLIC"),
+                "pushedAt": ov.get("pushedAt", ""),
+                "isArchived": ov.get("isArchived", False),
+                "category": ov.get("category", ""),
+                "featured": ov.get("featured", False),
+            }
+        else:
+            by_name[name]["category"] = ov.get("category", by_name[name]["category"])
+            by_name[name]["featured"] = ov.get("featured", by_name[name]["featured"])
+    return sorted(by_name.values(), key=lambda r: r["name"])
+
+
 @app.get("/api/entries")
 def list_entries(_auth: None = Depends(require_api_key)):
     return get_all_entries()
@@ -248,6 +322,11 @@ def get_memory_card(slug: str, _auth: None = Depends(require_api_key)):
     if card is None:
         raise HTTPException(status_code=404, detail="card not found")
     return card
+
+
+@app.get("/api/repos")
+def list_repos(_auth: None = Depends(require_api_key)):
+    return _merge_repos()
 
 
 @app.post("/api/cache/invalidate")
