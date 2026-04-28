@@ -1,456 +1,203 @@
-import { useCallback, useEffect, useState } from 'react';
-import { FileText, Shield, Clock, Save, X, Edit3, ChevronDown, ChevronRight, Folder, Package, AlertCircle } from 'lucide-react';
-import type { CronJob } from '../types';
+import { useEffect, useState } from 'react';
+import {
+  Settings,
+  Server,
+  Search as SearchIcon,
+  Library,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  AlertCircle,
+} from 'lucide-react';
+import { useDataSource } from '../data-sources/useDataSource';
 import { getApiKey } from '../lib/apiKey';
 
-/* ── Local fetch helpers (Config talks to a host-local config API,
- *    separate from the DataSource adapter layer) ── */
-
-const CONFIG_API_BASE = (() => {
-  if (typeof window === 'undefined') return 'http://localhost:8005';
-  const host = window.location.hostname;
-  return host === 'localhost' || host === '127.0.0.1'
-    ? 'http://localhost:8005'
-    : `http://${host}:8005`;
-})();
-
-function buildHeaders(headers?: HeadersInit): Headers {
-  const merged = new Headers(headers);
-  const apiKey = getApiKey();
-  if (apiKey) merged.set('X-API-Key', apiKey);
-  return merged;
-}
-
-async function configApiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${CONFIG_API_BASE}${path}`, { headers: buildHeaders() });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json() as Promise<T>;
-}
-
-async function configApiSend(path: string, options: RequestInit): Promise<void> {
-  const headers = buildHeaders(options.headers);
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const res = await fetch(`${CONFIG_API_BASE}${path}`, { ...options, headers });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-}
-
-function useConfigApi<T>(path: string) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    configApiGet<T>(path)
-      .then((d) => { setData(d); setLoading(false); })
-      .catch((e: Error) => { setError(e.message); setLoading(false); });
-  }, [path]);
-
-  useEffect(() => { refetch(); }, [refetch]);
-
-  return { data, loading, error, refetch };
-}
-
-/* ── Types ────────────────────────────────────────── */
-
-interface ConfigFile {
+interface EnvRow {
   name: string;
-  path: string;
-  size: number;
-  mtime: string | null;
-  content: string | null;
-  missing?: boolean;
-}
-
-interface Skill {
-  name: string;
-  location: 'system' | 'workspace';
-  path: string;
+  defaultValue: string;
+  resolved: string;
   description: string;
-  hasSkillMd: boolean;
-  content: string | null;
+  icon: typeof Settings;
 }
 
-interface Rule {
-  name: string;
-  path: string;
-  content: string;
-  size: number;
-  mtime: string;
-}
-
-interface CronDisplayJob extends Partial<CronJob> {
-  id?: string;
-  name?: string;
-  schedule?: string;
-  cron?: string;
-  command?: string;
-  task?: string;
-}
-
-type CronApiResponse = CronDisplayJob[] | { crons?: CronDisplayJob[]; raw?: string };
-
-/* ── Helpers ──────────────────────────────────────── */
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  return (bytes / 1024).toFixed(1) + ' KB';
-}
-
-function formatDate(d: string | null): string {
-  if (!d) return 'N/A';
-  return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-type Tab = 'files' | 'skills' | 'rules' | 'crons';
-
-const TABS: { id: Tab; label: string; icon: typeof FileText }[] = [
-  { id: 'files', label: 'Files', icon: FileText },
-  { id: 'skills', label: 'Skills', icon: Package },
-  { id: 'rules', label: 'Rules', icon: Shield },
-  { id: 'crons', label: 'Crons', icon: Clock },
+const ENV_ROWS: EnvRow[] = [
+  {
+    name: 'VITE_SIDECAR_BASE_URL',
+    defaultValue: 'http://localhost:8005',
+    resolved: import.meta.env.VITE_SIDECAR_BASE_URL || 'http://localhost:8005',
+    description: 'agent-intel sidecar (journal, repos, memory cards, codebase).',
+    icon: Server,
+  },
+  {
+    name: 'VITE_SEARCH_BASE_URL',
+    defaultValue: 'http://localhost:5204',
+    resolved: import.meta.env.VITE_SEARCH_BASE_URL || 'http://localhost:5204',
+    description: 'Optional code-search service from the ops-deck-lite skill.',
+    icon: SearchIcon,
+  },
+  {
+    name: 'VITE_PROMPTS_BASE_URL',
+    defaultValue: 'http://localhost:5202',
+    resolved: import.meta.env.VITE_PROMPTS_BASE_URL || 'http://localhost:5202',
+    description: 'Optional prompt-library service from the ops-deck-lite skill.',
+    icon: Library,
+  },
+  {
+    name: 'VITE_OPSDECK_HOST_IP',
+    defaultValue: '(window.location.hostname)',
+    resolved: import.meta.env.VITE_OPSDECK_HOST_IP
+      || (typeof window !== 'undefined' ? window.location.hostname : 'localhost'),
+    description: 'Host used to build links to running services. Defaults to the page host.',
+    icon: Server,
+  },
 ];
 
-/* ── File Editor ─────────────────────────────────── */
-
-function FileEditor({ file, onSave, onCancel }: { file: { name: string; content: string }; onSave: (content: string) => void; onCancel: () => void }) {
-  const [content, setContent] = useState(file.content);
-  const [saving, setSaving] = useState(false);
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-white font-medium">{file.name}</span>
-        <span className="text-xs text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">Editing</span>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={onCancel}
-            className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-1"
-          >
-            <X size={12} /> Cancel
-          </button>
-          <button
-            onClick={async () => { setSaving(true); await onSave(content); setSaving(false); }}
-            disabled={saving}
-            className="text-xs text-white px-3 py-1 rounded bg-[#7c5cfc] hover:bg-[#6a4de0] transition-colors flex items-center gap-1 disabled:opacity-50"
-          >
-            <Save size={12} /> {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </div>
-      <textarea
-        value={content}
-        onChange={e => setContent(e.target.value)}
-        className="w-full h-[500px] bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-gray-300 font-mono resize-y focus:outline-none focus:border-[#7c5cfc]/50"
-        spellCheck={false}
-      />
-    </div>
-  );
-}
-
-/* ── File Viewer ─────────────────────────────────── */
-
-function FileViewer({ file, content }: { file: string; content: string }) {
-  return (
-    <div className="space-y-2">
-      <div className="text-sm text-white font-medium">{file}</div>
-      <pre className="bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-gray-300 font-mono overflow-auto max-h-[500px] whitespace-pre-wrap">
-        {content}
-      </pre>
-    </div>
-  );
-}
-
-/* ── Files Tab ───────────────────────────────────── */
-
-function FilesTab() {
-  const { data: files, loading, error, refetch } = useConfigApi<ConfigFile[]>('/api/config/files');
-  const [selected, setSelected] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-
-  const activeFile = files?.find(f => f.name === selected);
-
-  async function handleSave(content: string) {
-    await configApiSend(`/api/config/file?path=${encodeURIComponent(selected!)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content }),
-    });
-    setEditing(false);
-    refetch();
-  }
-
-  if (loading) return <div className="text-gray-500 text-sm animate-pulse">Loading files...</div>;
-  if (error) return <div className="text-red-400 text-sm">Error: {error}</div>;
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-      {/* File list */}
-      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-        <div className="px-3 py-2 border-b border-white/10 text-xs text-gray-500 uppercase tracking-wide">Workspace Files</div>
-        {files?.map(f => (
-          <button
-            key={f.name}
-            onClick={() => { setSelected(f.name); setEditing(false); }}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
-              selected === f.name
-                ? 'bg-[#7c5cfc]/15 text-white border-l-2 border-[#7c5cfc]'
-                : 'text-gray-400 hover:text-white hover:bg-white/5 border-l-2 border-transparent'
-            }`}
-          >
-            <FileText size={14} className="shrink-0 opacity-50" />
-            <div className="flex-1 min-w-0">
-              <div className="truncate">{f.name}</div>
-              <div className="text-[10px] text-gray-600">
-                {f.missing ? 'Missing' : `${formatSize(f.size)} · ${formatDate(f.mtime)}`}
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {/* Content area */}
-      <div className="lg:col-span-3 bg-white/5 border border-white/10 rounded-xl p-4">
-        {!selected ? (
-          <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
-            Select a file to view
-          </div>
-        ) : activeFile?.missing ? (
-          <div className="flex items-center gap-2 text-gray-500 text-sm">
-            <AlertCircle size={14} /> File not found: {selected}
-          </div>
-        ) : editing ? (
-          <FileEditor
-            file={{ name: selected, content: activeFile?.content || '' }}
-            onSave={handleSave}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-white font-medium">{selected}</span>
-              <button
-                onClick={() => setEditing(true)}
-                className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-1 ml-auto"
-              >
-                <Edit3 size={12} /> Edit
-              </button>
-            </div>
-            <pre className="bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-gray-300 font-mono overflow-auto max-h-[500px] whitespace-pre-wrap">
-              {activeFile?.content}
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── Skills Tab ──────────────────────────────────── */
-
-function SkillsTab() {
-  const { data: skills, loading, error } = useConfigApi<Skill[]>('/api/config/skills');
-  const [expanded, setExpanded] = useState<string | null>(null);
-
-  if (loading) return <div className="text-gray-500 text-sm animate-pulse">Loading skills...</div>;
-  if (error) return <div className="text-red-400 text-sm">Error: {error}</div>;
-
-  const systemSkills = skills?.filter(s => s.location === 'system') || [];
-  const workspaceSkills = skills?.filter(s => s.location === 'workspace') || [];
-
-  function SkillGroup({ title, items }: { title: string; items: Skill[] }) {
-    return (
-      <div>
-        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-2">
-          <Folder size={12} /> {title} <span className="text-gray-600">({items.length})</span>
-        </div>
-        <div className="space-y-1">
-          {items.map(skill => (
-            <div key={skill.path} className="bg-white/5 border border-white/10 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setExpanded(expanded === skill.path ? null : skill.path)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
-              >
-                {expanded === skill.path ? <ChevronDown size={14} className="text-gray-500" /> : <ChevronRight size={14} className="text-gray-500" />}
-                <Package size={14} className="text-[#7c5cfc] shrink-0" />
-                <span className="text-sm text-white font-medium">{skill.name}</span>
-                {!skill.hasSkillMd && <span className="text-[10px] text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">No SKILL.md</span>}
-                <span className="text-xs text-gray-500 ml-auto truncate max-w-[300px]">{skill.description}</span>
-              </button>
-              {expanded === skill.path && skill.content && (
-                <div className="border-t border-white/5 px-3 pb-3">
-                  <pre className="bg-black/40 rounded-lg p-3 text-xs text-gray-400 font-mono overflow-auto max-h-[400px] whitespace-pre-wrap mt-2">
-                    {skill.content}
-                  </pre>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {systemSkills.length > 0 && <SkillGroup title="System Skills" items={systemSkills} />}
-      {workspaceSkills.length > 0 && <SkillGroup title="Workspace Skills" items={workspaceSkills} />}
-    </div>
-  );
-}
-
-/* ── Rules Tab ───────────────────────────────────── */
-
-function RulesTab() {
-  const { data: rules, loading, error, refetch } = useConfigApi<Rule[]>('/api/config/rules');
-  const [selected, setSelected] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-
-  const activeRule = rules?.find(r => r.name === selected);
-
-  async function handleSave(content: string) {
-    await configApiSend(`/api/config/rules/${encodeURIComponent(selected!)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content }),
-    });
-    setEditing(false);
-    refetch();
-  }
-
-  if (loading) return <div className="text-gray-500 text-sm animate-pulse">Loading rules...</div>;
-  if (error) return <div className="text-red-400 text-sm">Error: {error}</div>;
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-        <div className="px-3 py-2 border-b border-white/10 text-xs text-gray-500 uppercase tracking-wide">Rule Files</div>
-        {rules?.map(r => (
-          <button
-            key={r.name}
-            onClick={() => { setSelected(r.name); setEditing(false); }}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
-              selected === r.name
-                ? 'bg-[#7c5cfc]/15 text-white border-l-2 border-[#7c5cfc]'
-                : 'text-gray-400 hover:text-white hover:bg-white/5 border-l-2 border-transparent'
-            }`}
-          >
-            <Shield size={14} className="shrink-0 opacity-50" />
-            <div className="flex-1 min-w-0">
-              <div className="truncate">{r.name}</div>
-              <div className="text-[10px] text-gray-600">{formatSize(r.size)} · {formatDate(r.mtime)}</div>
-            </div>
-          </button>
-        ))}
-        {(!rules || rules.length === 0) && (
-          <div className="p-4 text-center text-gray-500 text-xs">No rule files found</div>
-        )}
-      </div>
-
-      <div className="lg:col-span-3 bg-white/5 border border-white/10 rounded-xl p-4">
-        {!selected ? (
-          <div className="flex items-center justify-center h-48 text-gray-500 text-sm">Select a rule to view</div>
-        ) : editing ? (
-          <FileEditor
-            file={{ name: selected, content: activeRule?.content || '' }}
-            onSave={handleSave}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-white font-medium">{selected}</span>
-              <button
-                onClick={() => setEditing(true)}
-                className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-1 ml-auto"
-              >
-                <Edit3 size={12} /> Edit
-              </button>
-            </div>
-            <pre className="bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-gray-300 font-mono overflow-auto max-h-[500px] whitespace-pre-wrap">
-              {activeRule?.content}
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── Crons Tab ───────────────────────────────────── */
-
-function CronsTab() {
-  const { data, loading, error } = useConfigApi<CronApiResponse>('/api/crons');
-
-  if (loading) return <div className="text-gray-500 text-sm animate-pulse">Loading crons...</div>;
-  if (error) return <div className="text-red-400 text-sm">Error: {error}</div>;
-
-  // Handle different response formats
-  const crons = Array.isArray(data) ? data : data?.crons || [];
-  const raw = !Array.isArray(data) ? data?.raw || null : null;
-
-  return (
-    <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10 text-sm text-white font-medium flex items-center gap-2">
-        <Clock size={16} className="text-gray-500" /> Scheduled Jobs
-      </div>
-      {raw ? (
-        <pre className="p-4 text-sm text-gray-300 font-mono whitespace-pre-wrap">{raw}</pre>
-      ) : crons.length > 0 ? (
-        <div className="divide-y divide-white/5">
-          {crons.map((c, i) => (
-            <div key={c.id || i} className="px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-white font-mono">{c.schedule || c.cron}</span>
-                <span className="text-xs text-gray-500">{c.id || c.name}</span>
-              </div>
-              <div className="text-xs text-gray-400 mt-1 font-mono">{c.command || c.task}</div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="p-8 text-center text-gray-500 text-sm">No cron jobs configured</div>
-      )}
-    </div>
-  );
-}
-
-/* ── Main Component ──────────────────────────────── */
-
 export default function Config() {
-  const [tab, setTab] = useState<Tab>('files');
+  const ds = useDataSource();
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [storedKey, setStoredKey] = useState('');
+
+  useEffect(() => {
+    setStoredKey(getApiKey());
+  }, []);
+
+  const apiKeyMasked = storedKey
+    ? `${storedKey.slice(0, 4)}${'•'.repeat(Math.max(0, storedKey.length - 4))}`
+    : '(not set)';
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div>
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-[#7c5cfc] to-[#06b6d4] bg-clip-text text-transparent">
-          Config Viewer
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">Workspace files, skills, rules, and scheduled jobs</p>
-      </div>
+    <div className="animate-fadeIn min-h-full" style={{ backgroundColor: '#0a0a14' }}>
+      <header className="mb-6">
+        <div className="flex items-center gap-3 mb-1">
+          <Settings size={22} className="text-[#7c5cfc]" />
+          <h1 className="text-xl font-semibold text-white">Config</h1>
+        </div>
+        <p className="text-sm text-gray-500">
+          Build-time configuration for this dashboard. Set values in <code className="text-gray-400">.env</code> or
+          via the Vite dev server before <code className="text-gray-400">npm run build</code>.
+        </p>
+      </header>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-white/5 rounded-lg p-1 w-fit">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              tab === t.id
-                ? 'bg-[#7c5cfc]/20 text-white shadow-[inset_0_0_0_1px_rgba(124,92,252,0.3)]'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
+      <section className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <KeyRound size={14} className="text-[#7c5cfc]" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">API Key</h2>
+        </div>
+        <div className="rounded-xl border border-dashed border-white/10 bg-[#16162a] p-4">
+          <p className="text-xs text-gray-400 mb-3">
+            If your sidecar is configured with <code className="text-gray-300">OPSDECK_API_KEY</code>, the dashboard
+            sends it as the <code className="text-gray-300">X-API-Key</code> header on every request. The key is read
+            from <code className="text-gray-300">VITE_OPSDECK_API_KEY</code> at build time, falling back to the
+            <code className="text-gray-300"> opsdeck_api_key</code> entry in <code className="text-gray-300">localStorage</code>.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-lg border border-white/5 bg-black/40 px-3 py-2 text-xs font-mono text-gray-300">
+              {showApiKey ? (storedKey || '(not set)') : apiKeyMasked}
+            </code>
+            <button
+              onClick={() => setShowApiKey((v) => !v)}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              title={showApiKey ? 'Hide key' : 'Show key'}
+            >
+              {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <Server size={14} className="text-[#7c5cfc]" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">Service Endpoints</h2>
+        </div>
+        <div className="space-y-2">
+          {ENV_ROWS.map((row) => {
+            const Icon = row.icon;
+            return (
+              <div
+                key={row.name}
+                className="rounded-xl border border-dashed border-white/10 bg-[#16162a] p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <Icon size={16} className="text-[#7c5cfc] mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <code className="text-xs font-mono text-white">{row.name}</code>
+                      <span className="text-[11px] text-gray-500">default: <code>{row.defaultValue}</code></span>
+                    </div>
+                    <div className="mt-1 text-xs text-gray-400">{row.description}</div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500 shrink-0">resolved:</span>
+                      <code className="rounded-md bg-black/40 px-2 py-0.5 text-[11px] font-mono text-emerald-400">
+                        {row.resolved}
+                      </code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <Settings size={14} className="text-[#7c5cfc]" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">Active Adapter</h2>
+        </div>
+        <div className="rounded-xl border border-dashed border-white/10 bg-[#16162a] p-4">
+          <p className="text-xs text-gray-400 mb-3">
+            The dashboard probes <code className="text-gray-300">/healthz</code> on the sidecar at boot and picks an
+            adapter based on what's reachable. If the probe fails, the openclaw-only fallback is used (all data
+            sources return empty).
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {(Object.entries(ds.capabilities) as [keyof typeof ds.capabilities, boolean][]).map(([cap, ok]) => (
+              <div
+                key={cap}
+                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${
+                  ok
+                    ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-300'
+                    : 'border-white/10 bg-white/[0.02] text-gray-500'
+                }`}
+              >
+                <span className="font-mono">{cap}</span>
+                <span className={`text-[10px] font-bold ${ok ? 'text-emerald-400' : 'text-gray-600'}`}>
+                  {ok ? 'LIVE' : 'OFF'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <AlertCircle size={14} className="text-[#7c5cfc]" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">Setup Notes</h2>
+        </div>
+        <div className="rounded-xl border border-dashed border-white/10 bg-[#16162a] p-4 text-xs text-gray-400 space-y-2">
+          <p>
+            Editing config in this dashboard is intentionally read-only. To change settings, edit your
+            <code className="text-gray-300"> .env</code> file and rebuild, or set environment variables on the
+            container running the UI.
+          </p>
+          <p>
+            The sidecar's <code className="text-gray-300">CARDS_DIR</code>, <code className="text-gray-300">REPOS_OVERLAY</code>,
+            and <code className="text-gray-300">CODEBASE_OVERLAY</code> env vars control what gets served to the
+            dashboard. See the repo README for the full list.
+          </p>
+          <a
+            href="https://github.com/solomonneas/ops-deck-oss"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 mt-1 text-[#7c5cfc] hover:text-[#9b7cff] transition-colors"
           >
-            <t.icon size={14} />
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      {tab === 'files' && <FilesTab />}
-      {tab === 'skills' && <SkillsTab />}
-      {tab === 'rules' && <RulesTab />}
-      {tab === 'crons' && <CronsTab />}
+            Documentation <ExternalLink size={11} />
+          </a>
+        </div>
+      </section>
     </div>
   );
 }
