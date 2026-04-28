@@ -13,11 +13,12 @@ export function DataSourceProvider({ children }: Props) {
   const [ds, setDs] = useState<DataSource>(createOpenclawOnlyDataSource());
 
   useEffect(() => {
-    const sidecarBaseUrl = import.meta.env.VITE_SIDECAR_BASE_URL ?? "http://localhost:8005";
-    const apiKey = import.meta.env.VITE_OPSDECK_API_KEY ?? undefined;
-    const searchBaseUrl = import.meta.env.VITE_SEARCH_BASE_URL ?? "http://localhost:5204";
-    const promptsBaseUrl = import.meta.env.VITE_PROMPTS_BASE_URL ?? "http://localhost:5202";
-    selectDataSource({ sidecarBaseUrl, apiKey, searchBaseUrl, promptsBaseUrl }).then(setDs);
+    const env = import.meta.env;
+    const sidecarBaseUrl = env.VITE_SIDECAR_BASE_URL ?? "http://localhost:8005";
+    const sidecarKey = env.VITE_OPSDECK_API_KEY ?? undefined;
+    const searchBaseUrl = env.VITE_SEARCH_BASE_URL ?? "http://localhost:5204";
+    const promptsBaseUrl = env.VITE_PROMPTS_BASE_URL ?? "http://localhost:5202";
+    selectDataSource({ sidecarBaseUrl, apiKey: sidecarKey, searchBaseUrl, promptsBaseUrl }).then(setDs);
   }, []);
 
   return <DataSourceContext.Provider value={ds}>{children}</DataSourceContext.Provider>;
