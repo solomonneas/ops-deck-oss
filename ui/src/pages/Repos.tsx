@@ -23,7 +23,12 @@ import {
 import { REPOS, type RepoCategory, type RepoStatus } from '../data/repos';
 import { REPO_DETAILS } from '../data/repos-detail';
 
-const HOST_IP = '192.168.4.86';
+// Host for in-app links to running services. Defaults to the current page
+// host (so the link resolves wherever the dashboard is being viewed from);
+// override with the VITE_OPSDECK_HOST_IP env var if you want to pin it to a
+// specific LAN IP or hostname.
+const HOST_IP = import.meta.env.VITE_OPSDECK_HOST_IP
+  || (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
 
 const CATEGORY_CONFIG: Record<RepoCategory, { label: string; icon: typeof Shield; color: string; order: number }> = {
   security: { label: 'Security', icon: Shield, color: '#ef4444', order: 0 },

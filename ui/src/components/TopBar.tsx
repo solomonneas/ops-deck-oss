@@ -8,9 +8,8 @@ export default function TopBar() {
         <LobsterIcon size={20} className="text-[#e63946]" />
         <Rocket size={14} className="text-[#ff6b35]" />
         <span className="text-sm font-bold bg-gradient-to-r from-[#e63946] via-[#ff6b35] to-[#f7b32b] bg-clip-text text-transparent">
-          rocinante
+          ops deck
         </span>
-        <span className="text-xs text-gray-600 ml-1">ops deck</span>
       </div>
 
       <div className="flex items-center gap-3">

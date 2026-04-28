@@ -81,7 +81,7 @@ export default function Sidebar() {
           <span className="text-sm font-bold flex items-center gap-1.5">
             <Rocket size={14} className="text-[#ff6b35]" />
             <span className="bg-gradient-to-r from-[#e63946] via-[#ff6b35] to-[#f7b32b] bg-clip-text text-transparent">
-              rocinante
+              ops deck
             </span>
           </span>
         </div>
@@ -108,7 +108,7 @@ export default function Sidebar() {
             <span className="text-sm font-bold tracking-wide flex items-center gap-1.5">
               <Rocket size={14} className="text-[#ff6b35]" />
               <span className="bg-gradient-to-r from-[#e63946] via-[#ff6b35] to-[#f7b32b] bg-clip-text text-transparent">
-                rocinante
+                ops deck
               </span>
             </span>
           )}
