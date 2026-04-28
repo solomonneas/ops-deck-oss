@@ -1,0 +1,10 @@
+# One PCRE alternative per non-blank, non-comment line. The pre-commit and
+# commit-msg hooks join these with '|' to form the layer-2 block regex. This
+# file is the source of truth: edit here, no need to touch the hook scripts.
+#
+# This file is exempt from the layer-2 grep itself (the hook skips it by path),
+# so it can contain the literal forbidden tokens.
+\b(Rocinante|Gandalf|Hogwarts|gandalf|hogwarts|rocinante|clawdbot|solomon|srnea)\b
+192\.168\.4\.[0-9]{1,3}
+\bUSF\b
+university of south florida
