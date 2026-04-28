@@ -1,28 +1,7 @@
-import { useState } from 'react';
-import { useApi } from '../hooks/useApi';
+import { useEffect, useState } from 'react';
+import { useDataSource } from '../data-sources/useDataSource';
+import type { Prompt } from '../data-sources/types';
 import { BookOpen, X, Search, Tag, Copy, Check } from 'lucide-react';
-
-interface Variable {
-  name: string;
-  description: string;
-}
-
-interface Prompt {
-  id: string;
-  name: string;
-  title: string;
-  category: string;
-  tags: string[];
-  content: string;
-  variables: Variable[];
-  current_version: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface PromptsData {
-  prompts: Prompt[];
-}
 
 const CATEGORY_COLORS: Record<string, string> = {
   development: '#3b82f6',
@@ -34,35 +13,43 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function Prompts() {
-  const { data, loading } = useApi<PromptsData>('/api/prompt-library');
+  const ds = useDataSource();
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [, setError] = useState<Error | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const prompts = data?.prompts ?? [];
+  useEffect(() => {
+    setLoading(true);
+    ds.getPrompts()
+      .then((d) => { setPrompts(d); setLoading(false); })
+      .catch((e) => { setError(e); setLoading(false); });
+  }, [ds]);
+
   const allCategories = Array.from(new Set(prompts.map(p => p.category))).sort();
 
   const filteredPrompts = prompts.filter(p => {
-    const matchesSearch = !search || 
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.content.toLowerCase().includes(search.toLowerCase()) ||
-      p.tags.some(t => t.toLowerCase().includes(search.toLowerCase()));
+    const q = search.toLowerCase();
+    const matchesSearch = !search ||
+      p.name.toLowerCase().includes(q) ||
+      p.body.toLowerCase().includes(q);
     const matchesCategory = !filterCategory || p.category === filterCategory;
     return matchesSearch && matchesCategory;
   });
 
   const handleCopy = () => {
     if (selectedPrompt) {
-      navigator.clipboard.writeText(selectedPrompt.content);
+      navigator.clipboard.writeText(selectedPrompt.body);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const highlightVariables = (content: string) => {
-    const parts = content.split(/({{[^}]+}})/g);
+  const highlightVariables = (body: string) => {
+    const parts = body.split(/({{[^}]+}})/g);
     return parts.map((part, i) => {
       if (part.match(/^{{[^}]+}}$/)) {
         return (
@@ -147,7 +134,7 @@ export default function Prompts() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-semibold text-white mb-1 group-hover:text-[#7c5cfc] transition-colors">
-                      {prompt.title || prompt.name}
+                      {prompt.name}
                     </h3>
                     <span
                       className="text-[10px] font-medium px-2 py-0.5 rounded-full inline-block"
@@ -162,29 +149,8 @@ export default function Prompts() {
                 </div>
 
                 <p className="text-xs text-gray-400 leading-relaxed mb-3 line-clamp-3">
-                  {prompt.content.substring(0, 120)}...
+                  {prompt.body.substring(0, 120)}...
                 </p>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-wrap gap-1.5">
-                    {prompt.tags.slice(0, 3).map(tag => (
-                      <span
-                        key={tag}
-                        className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#7c5cfc]/15 text-[#7c5cfc]"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    {prompt.tags.length > 3 && (
-                      <span className="text-[10px] text-gray-500">+{prompt.tags.length - 3}</span>
-                    )}
-                  </div>
-                  {prompt.variables.length > 0 && (
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 text-gray-400">
-                      {prompt.variables.length} var{prompt.variables.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
               </button>
             ))}
           </div>
@@ -215,7 +181,7 @@ export default function Prompts() {
                   <BookOpen size={20} className="text-[#7c5cfc]" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-white">{selectedPrompt.title || selectedPrompt.name}</h3>
+                  <h3 className="text-base font-semibold text-white">{selectedPrompt.name}</h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span
                       className="text-[10px] font-medium px-2 py-0.5 rounded-full"
@@ -226,7 +192,6 @@ export default function Prompts() {
                     >
                       {selectedPrompt.category}
                     </span>
-                    <span className="text-[10px] text-gray-500">v{selectedPrompt.current_version}</span>
                   </div>
                 </div>
               </div>
@@ -258,22 +223,8 @@ export default function Prompts() {
 
             {/* Content */}
             <div className="flex-1 overflow-auto px-6 py-5">
-              {selectedPrompt.variables.length > 0 && (
-                <div className="mb-4 p-4 bg-white/5 border border-dashed border-white/10 rounded-lg">
-                  <div className="text-xs font-semibold text-white mb-2 uppercase tracking-wider">Variables</div>
-                  <div className="space-y-2">
-                    {selectedPrompt.variables.map((v, i) => (
-                      <div key={i} className="text-xs">
-                        <span className="font-mono text-[#7c5cfc]">{`{{${v.name}}}`}</span>
-                        <span className="text-gray-400 ml-2">- {v.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
               <pre className="text-sm text-gray-300 font-mono leading-relaxed whitespace-pre-wrap font-['JetBrains_Mono']">
-                {highlightVariables(selectedPrompt.content)}
+                {highlightVariables(selectedPrompt.body)}
               </pre>
             </div>
 
@@ -282,17 +233,12 @@ export default function Prompts() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Tag size={14} className="text-gray-500" />
-                  {selectedPrompt.tags.map(tag => (
-                    <span
-                      key={tag}
-                      className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#7c5cfc]/15 text-[#7c5cfc]"
-                    >
-                      {tag}
-                    </span>
-                  ))}
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#7c5cfc]/15 text-[#7c5cfc]">
+                    {selectedPrompt.category}
+                  </span>
                 </div>
                 <div className="text-[10px] text-gray-500">
-                  {selectedPrompt.content.split(' ').length} words
+                  {selectedPrompt.body.split(' ').length} words
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ExternalLink,
@@ -20,8 +20,8 @@ import {
   Pause,
   ArrowRight,
 } from 'lucide-react';
-import { REPOS, type RepoCategory, type RepoStatus } from '../data/repos';
-import { REPO_DETAILS } from '../data/repos-detail';
+import { type Repo, type RepoCategory, type RepoStatus } from '../data/repos';
+import { useDataSource } from '../data-sources/useDataSource';
 
 // Host for in-app links to running services. Defaults to the current page
 // host (so the link resolves wherever the dashboard is being viewed from);
@@ -50,10 +50,21 @@ const STATUS_CONFIG: Record<RepoStatus, { label: string; icon: typeof Rocket; bg
 type FilterStatus = RepoStatus | 'all';
 
 export default function Repos() {
+  const ds = useDataSource();
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [, setLoading] = useState(true);
+  const [, setError] = useState<Error | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [showArchived, setShowArchived] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<RepoCategory>>(new Set(['archived']));
+
+  useEffect(() => {
+    setLoading(true);
+    ds.getRepos()
+      .then((d) => { setRepos(d); setLoading(false); })
+      .catch((e) => { setError(e); setLoading(false); });
+  }, [ds]);
 
   const toggleSection = (cat: RepoCategory) => {
     setCollapsedSections((prev) => {
@@ -66,7 +77,7 @@ export default function Repos() {
 
   const { grouped, counts } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let filtered = REPOS.filter((r) => {
+    const filtered = repos.filter((r) => {
       if (!showArchived && r.status === 'archived') return false;
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
       if (q && !r.name.toLowerCase().includes(q) && !r.description.toLowerCase().includes(q)) return false;
@@ -86,16 +97,16 @@ export default function Repos() {
     return {
       grouped,
       counts: {
-        total: REPOS.filter((r) => r.status !== 'archived').length,
-        live: REPOS.filter((r) => r.status === 'live').length,
-        dev: REPOS.filter((r) => r.status === 'dev').length,
-        shelved: REPOS.filter((r) => r.status === 'shelved').length,
-        archived: REPOS.filter((r) => r.status === 'archived').length,
-        public: REPOS.filter((r) => r.visibility === 'public' && r.status !== 'archived').length,
-        private: REPOS.filter((r) => r.visibility === 'private' && r.status !== 'archived').length,
+        total: repos.filter((r) => r.status !== 'archived').length,
+        live: repos.filter((r) => r.status === 'live').length,
+        dev: repos.filter((r) => r.status === 'dev').length,
+        shelved: repos.filter((r) => r.status === 'shelved').length,
+        archived: repos.filter((r) => r.status === 'archived').length,
+        public: repos.filter((r) => r.visibility === 'public' && r.status !== 'archived').length,
+        private: repos.filter((r) => r.visibility === 'private' && r.status !== 'archived').length,
       },
     };
-  }, [query, statusFilter, showArchived]);
+  }, [repos, query, statusFilter, showArchived]);
 
   return (
     <div className="animate-fadeIn min-h-full" style={{ backgroundColor: '#0a0a14' }}>
@@ -306,15 +317,13 @@ export default function Repos() {
                         </div>
 
                         {/* Deep Dive link */}
-                        {REPO_DETAILS[repo.slug] && (
-                          <Link
-                            to={`/repos/${repo.slug}`}
-                            className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-[#7c5cfc] hover:text-[#9d84fc] transition-colors group/link"
-                          >
-                            <span>Deep Dive</span>
-                            <ArrowRight size={11} className="transition-transform group-hover/link:translate-x-0.5" />
-                          </Link>
-                        )}
+                        <Link
+                          to={`/repos/${repo.slug}`}
+                          className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-[#7c5cfc] hover:text-[#9d84fc] transition-colors group/link"
+                        >
+                          <span>Deep Dive</span>
+                          <ArrowRight size={11} className="transition-transform group-hover/link:translate-x-0.5" />
+                        </Link>
                       </article>
                     );
                   })}

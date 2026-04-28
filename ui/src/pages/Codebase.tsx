@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Copy,
   FolderOpen,
@@ -14,7 +14,6 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import {
-  projects,
   workspaceDirs,
   rootFiles,
   categoryMeta,
@@ -23,6 +22,7 @@ import {
   type ProjectStatus,
   type ProjectEntry,
 } from '../data/codebase';
+import { useDataSource } from '../data-sources/useDataSource';
 
 type TabKey = 'projects' | 'workspace' | 'files' | 'quick-nav';
 type CategoryFilter = 'all' | ProjectCategory;
@@ -235,10 +235,21 @@ function ProjectCard({ project }: { project: ProjectEntry }) {
 }
 
 export default function Codebase() {
+  const ds = useDataSource();
+  const [projects, setProjects] = useState<ProjectEntry[]>([]);
+  const [, setLoading] = useState(true);
+  const [, setError] = useState<Error | null>(null);
   const [tab, setTab] = useState<TabKey>('projects');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    ds.getCodebase()
+      .then((d) => { setProjects(d); setLoading(false); })
+      .catch((e) => { setError(e); setLoading(false); });
+  }, [ds]);
 
   const stats = useMemo(() => {
     return {
@@ -248,7 +259,7 @@ export default function Codebase() {
       complete: projects.filter((p) => p.status === 'complete').length,
       shelved: projects.filter((p) => p.status === 'shelved').length,
     };
-  }, []);
+  }, [projects]);
 
   const filteredProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -258,9 +269,9 @@ export default function Codebase() {
       if (q && !p.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [categoryFilter, statusFilter, query]);
+  }, [projects, categoryFilter, statusFilter, query]);
 
-  const liveProjects = useMemo(() => projects.filter((p) => p.status === 'live'), []);
+  const liveProjects = useMemo(() => projects.filter((p) => p.status === 'live'), [projects]);
 
   const byCategory = useMemo(() => {
     const map = new Map<ProjectCategory, ProjectEntry[]>();
@@ -270,7 +281,7 @@ export default function Codebase() {
       map.set(p.category, current);
     });
     return map;
-  }, []);
+  }, [projects]);
 
   return (
     <div className="animate-fadeIn min-h-full bg-[#0a0a14]">
