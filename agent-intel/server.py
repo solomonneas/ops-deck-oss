@@ -221,14 +221,23 @@ def _get_card(slug: str) -> dict | None:
     return _parse_card(target)
 
 
+GH_REPO_LIST_ARGS = [
+    "gh", "repo", "list", "--limit", "200",
+    "--json", "name,description,url,visibility,pushedAt,isArchived",
+]
+GH_NEGATIVE_CACHE_SECONDS = 60
+
+
 def _load_overlay() -> dict[str, dict]:
     if not REPOS_OVERLAY.exists():
         return {}
     try:
         raw = json.loads(REPOS_OVERLAY.read_text())
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to parse repos overlay %s: %s", REPOS_OVERLAY, exc)
         return {}
     if not isinstance(raw, list):
+        logger.warning("Repos overlay %s root is not a list; ignoring", REPOS_OVERLAY)
         return {}
     return {entry["name"]: entry for entry in raw if isinstance(entry, dict) and "name" in entry}
 
@@ -242,14 +251,25 @@ def _fetch_gh_repos() -> list[dict]:
         return _repos_cache["data"]
     try:
         result = subprocess.run(
-            ["gh", "repo", "list", "--limit", "200", "--json",
-             "name,description,url,visibility,pushedAt,isArchived"],
+            GH_REPO_LIST_ARGS,
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode != 0:
+            logger.warning(
+                "gh repo list failed (rc=%s): %s",
+                result.returncode, result.stderr.strip(),
+            )
+            _repos_cache["data"] = []
+            _repos_cache["expires_at"] = time.time() + GH_NEGATIVE_CACHE_SECONDS
             return []
         data = json.loads(result.stdout)
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+        # Negative-cache transient/persistent failures so a broken `gh` (auth
+        # expired, missing binary, network down) doesn't spawn a subprocess
+        # storm under a polling UI.
+        logger.warning("gh repo list errored (%s): %s", type(exc).__name__, exc)
+        _repos_cache["data"] = []
+        _repos_cache["expires_at"] = time.time() + GH_NEGATIVE_CACHE_SECONDS
         return []
     _repos_cache["data"] = data
     _repos_cache["expires_at"] = time.time() + GH_CACHE_TTL
@@ -257,6 +277,14 @@ def _fetch_gh_repos() -> list[dict]:
 
 
 def _merge_repos() -> list[dict]:
+    """Merge gh data with overlay annotations.
+
+    gh is the source of truth for facts (description, url, visibility,
+    pushedAt, isArchived). The overlay is the source of truth for annotations
+    (category, featured) AND for repos gh doesn't see (private clones, repos
+    on different remotes). Overlay-only entries get all fields from overlay;
+    gh-matched entries only have category/featured overridden.
+    """
     overlay = _load_overlay()
     gh_data = _fetch_gh_repos()
     by_name: dict[str, dict] = {}
