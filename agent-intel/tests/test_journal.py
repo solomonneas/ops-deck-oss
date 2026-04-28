@@ -19,3 +19,20 @@ def test_entries_lists_seeded_daily_files(client, tmp_workspace):
     body = response.json()
     assert len(body) == 1
     assert body[0]["date"] == "2026-04-28"
+
+
+def test_healthz_reports_capabilities(client):
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert "capabilities" in body
+    caps = body["capabilities"]
+    # Always-true: this sidecar always serves these.
+    assert caps["journal"] is True
+    assert caps["memory"] is True
+    assert caps["repos"] is True
+    assert caps["codebase"] is True
+    # Probed: these depend on optional ops-deck-lite services.
+    assert "search" in caps  # bool, value depends on whether :5204 is reachable
+    assert "prompts" in caps  # bool, value depends on whether :5202 is reachable
