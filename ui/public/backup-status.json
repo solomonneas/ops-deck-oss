@@ -1,0 +1,15 @@
+{
+  "verifiedAt": "2026-04-26T04:31:36-04:00",
+  "nas": {
+    "snapshotCount": 27,
+    "lastSnapshot": "2026-04-26T03:54:41.592334052-04:00",
+    "integrity": "ok",
+    "message": "5% sample verified, no errors"
+  },
+  "gdrive": {
+    "snapshotCount": 29,
+    "lastSnapshot": "2026-04-26T03:00:33.354173295-04:00",
+    "integrity": "ok",
+    "message": "5% sample verified, no errors"
+  }
+}
