@@ -51,3 +51,21 @@ def test_repos_list_route_unaffected_by_detail_route(client, tmp_workspace, monk
     body = response.json()
     assert isinstance(body, list)
     assert any(r["name"] == "foo" for r in body)
+
+
+def test_repo_detail_404_when_overlay_missing(client, tmp_workspace, monkeypatch):
+    # No overlay file at all; route must 404 cleanly without crashing on the
+    # missing-file branch.
+    monkeypatch.setenv("REPO_DETAIL_OVERLAY", str(tmp_workspace / "nope.json"))
+    response = client.get("/api/repos/foo")
+    assert response.status_code == 404
+
+
+def test_repo_detail_404_on_malformed_json(client, tmp_workspace, monkeypatch):
+    # Malformed JSON triggers JSONDecodeError; helper must log and return None
+    # so the route surfaces a 404 rather than a 500.
+    overlay_path = tmp_workspace / "repos-detail.json"
+    monkeypatch.setenv("REPO_DETAIL_OVERLAY", str(overlay_path))
+    overlay_path.write_text("not valid json {{{")
+    response = client.get("/api/repos/foo")
+    assert response.status_code == 404
