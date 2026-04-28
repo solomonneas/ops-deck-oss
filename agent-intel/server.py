@@ -6,6 +6,7 @@ import socket
 import time
 from pathlib import Path
 
+import yaml
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,6 +18,7 @@ if not API_KEY:
 
 BIND_HOST = os.environ.get("BIND_HOST", "127.0.0.1")
 MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "/home/clawdbot/.openclaw/workspace/memory"))
+CARDS_DIR = Path(os.environ.get("CARDS_DIR", "/home/clawdbot/.openclaw/workspace/memory/cards"))
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 CACHE_TTL_SECONDS = 30
 CODE_SEARCH_PORT = int(os.environ.get("CODE_SEARCH_PORT", "5204"))
@@ -166,6 +168,41 @@ def get_all_entries() -> list[dict]:
     return entries
 
 
+def _parse_card(filepath: Path) -> dict:
+    text = filepath.read_text()
+    frontmatter: dict = {}
+    body = text
+    if text.startswith("---\n"):
+        end = text.find("\n---\n", 4)
+        if end != -1:
+            try:
+                frontmatter = yaml.safe_load(text[4:end]) or {}
+            except yaml.YAMLError:
+                frontmatter = {}
+            body = text[end + 5 :]
+    return {
+        "slug": filepath.stem,
+        "topic": frontmatter.get("topic", filepath.stem),
+        "category": frontmatter.get("category", ""),
+        "tags": frontmatter.get("tags", []),
+        "body": body,
+    }
+
+
+def _list_cards() -> list[dict]:
+    if not CARDS_DIR.exists():
+        return []
+    cards = [_parse_card(p) for p in sorted(CARDS_DIR.glob("*.md"))]
+    return [{k: v for k, v in c.items() if k != "body"} for c in cards]
+
+
+def _get_card(slug: str) -> dict | None:
+    target = CARDS_DIR / f"{slug}.md"
+    if not target.exists():
+        return None
+    return _parse_card(target)
+
+
 @app.get("/api/entries")
 def list_entries(_auth: None = Depends(require_api_key)):
     return get_all_entries()
@@ -185,6 +222,19 @@ def get_entry(date: str, _auth: None = Depends(require_api_key)):
     except Exception as exc:
         logger.exception("Failed to parse journal entry %s: %s", filepath, exc)
         raise HTTPException(status_code=500, detail="Failed to parse journal entry") from exc
+
+
+@app.get("/api/memory-cards")
+def list_memory_cards(_auth: None = Depends(require_api_key)):
+    return _list_cards()
+
+
+@app.get("/api/memory-cards/{slug}")
+def get_memory_card(slug: str, _auth: None = Depends(require_api_key)):
+    card = _get_card(slug)
+    if card is None:
+        raise HTTPException(status_code=404, detail="card not found")
+    return card
 
 
 @app.post("/api/cache/invalidate")
