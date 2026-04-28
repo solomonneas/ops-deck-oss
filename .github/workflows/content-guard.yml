@@ -35,8 +35,10 @@ jobs:
             echo "No patterns to enforce"; exit 0
           fi
           # Scan all tracked files. Exempt the pattern file and the hooks themselves.
+          # .content-guard.yml legitimately contains the regex literals it
+          # defines, so it's exempt for the same reason the pattern file is.
           MATCHES="$(git ls-files \
-            | grep -vE '^\.githooks/(project-blocks\.txt|pre-commit|commit-msg)$' \
+            | grep -vE '^\.githooks/(project-blocks\.txt|pre-commit|commit-msg)$|^\.content-guard\.yml$' \
             | xargs -I{} grep -nP -H "$PATTERN" {} 2>/dev/null || true)"
           if [ -n "$MATCHES" ]; then
             echo "Project-specific Content Guard rules BLOCKED:"
