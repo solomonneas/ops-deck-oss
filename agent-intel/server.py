@@ -22,6 +22,10 @@ BIND_HOST = os.environ.get("BIND_HOST", "127.0.0.1")
 MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "/home/clawdbot/.openclaw/workspace/memory"))
 CARDS_DIR = Path(os.environ.get("CARDS_DIR", "/home/clawdbot/.openclaw/workspace/memory/cards"))
 REPOS_OVERLAY = Path(os.environ.get("REPOS_OVERLAY", "/home/clawdbot/repos/ops-deck-oss/repos.json"))
+REPO_DETAIL_OVERLAY = Path(os.environ.get(
+    "REPO_DETAIL_OVERLAY",
+    "/home/clawdbot/repos/ops-deck-oss/repos-detail.json",
+))
 GH_CACHE_TTL = int(os.environ.get("GH_CACHE_TTL_SECONDS", "600"))
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 CACHE_TTL_SECONDS = 30
@@ -318,6 +322,26 @@ def _merge_repos() -> list[dict]:
     return sorted(by_name.values(), key=lambda r: r["name"])
 
 
+def _load_repo_detail(slug: str) -> dict | None:
+    # Read overlay path at call time so tests can re-point it via monkeypatch
+    # without forcing a server reload, matching the GH_ENABLED pattern. Falls
+    # back to module-level REPO_DETAIL_OVERLAY otherwise.
+    overlay_path = Path(os.environ.get("REPO_DETAIL_OVERLAY", str(REPO_DETAIL_OVERLAY)))
+    if not overlay_path.exists():
+        return None
+    try:
+        raw = json.loads(overlay_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to parse repo detail overlay %s: %s", overlay_path, exc)
+        return None
+    if not isinstance(raw, dict):
+        return None
+    entry = raw.get(slug)
+    if not isinstance(entry, dict):
+        return None
+    return entry
+
+
 @app.get("/api/entries")
 def list_entries(_auth: None = Depends(require_api_key)):
     return get_all_entries()
@@ -355,6 +379,16 @@ def get_memory_card(slug: str, _auth: None = Depends(require_api_key)):
 @app.get("/api/repos")
 def list_repos(_auth: None = Depends(require_api_key)):
     return _merge_repos()
+
+
+@app.get("/api/repos/{slug}")
+def get_repo_detail(slug: str, _auth: None = Depends(require_api_key)):
+    if not SLUG_PATTERN.match(slug):
+        raise HTTPException(status_code=404, detail="repo detail not found")
+    detail = _load_repo_detail(slug)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="repo detail not found")
+    return detail
 
 
 @app.post("/api/cache/invalidate")
