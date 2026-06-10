@@ -1,16 +1,15 @@
-import { createContext, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { DataSource } from "./types";
 import { selectDataSource } from ".";
 import { createOpenclawOnlyDataSource } from "./openclaw-only";
-
-export const DataSourceContext = createContext<DataSource>(createOpenclawOnlyDataSource());
+import { DataSourceContext } from "./context";
 
 interface Props {
   children: ReactNode;
 }
 
 export function DataSourceProvider({ children }: Props) {
-  const [ds, setDs] = useState<DataSource>(createOpenclawOnlyDataSource());
+  const [ds, setDs] = useState<DataSource>(() => createOpenclawOnlyDataSource());
 
   useEffect(() => {
     const env = import.meta.env;

@@ -52,7 +52,6 @@ type FilterStatus = RepoStatus | 'all';
 export default function Repos() {
   const ds = useDataSource();
   const [repos, setRepos] = useState<Repo[]>([]);
-  const [, setLoading] = useState(true);
   const [, setError] = useState<Error | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
@@ -60,10 +59,9 @@ export default function Repos() {
   const [collapsedSections, setCollapsedSections] = useState<Set<RepoCategory>>(new Set(['archived']));
 
   useEffect(() => {
-    setLoading(true);
     ds.getRepos()
-      .then((d) => { setRepos(d); setLoading(false); })
-      .catch((e) => { setError(e); setLoading(false); });
+      .then((d) => setRepos(d))
+      .catch((e) => setError(e));
   }, [ds]);
 
   const toggleSection = (cat: RepoCategory) => {

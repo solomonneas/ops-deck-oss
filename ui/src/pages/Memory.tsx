@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDataSource } from '../data-sources/useDataSource';
-import type { MemoryCard } from '../data-sources/types';
+import type { DataSource, MemoryCard } from '../data-sources/types';
 import { Search, ChevronDown, ChevronRight, Tag, Layers } from 'lucide-react';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -22,44 +22,39 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function Memory() {
   const ds = useDataSource();
   const [cards, setCards] = useState<MemoryCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading is derived: we are loading until the current data source has
+  // answered (initially, and again whenever the data source changes).
+  const [loadedDs, setLoadedDs] = useState<DataSource | null>(null);
+  const loading = loadedDs !== ds;
   const [, setError] = useState<Error | null>(null);
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const [cardBody, setCardBody] = useState<string>('');
-  const [bodyLoading, setBodyLoading] = useState(false);
+  const [fetchedBody, setFetchedBody] = useState<{ slug: string; body: string } | null>(null);
 
   useEffect(() => {
-    setLoading(true);
     ds.getMemoryCards()
-      .then((d) => { setCards(d); setLoading(false); })
-      .catch((e) => { setError(e); setLoading(false); });
+      .then((d) => { setCards(d); setLoadedDs(ds); })
+      .catch((e) => { setError(e); setLoadedDs(ds); });
   }, [ds]);
 
+  // Lazy-load the body of the expanded card when the list doesn't carry it.
   useEffect(() => {
-    if (!expandedCard) {
-      setCardBody('');
-      return;
-    }
-    // Use body from list if present, otherwise lazy-load
+    if (!expandedCard) return;
     const card = cards.find(c => c.slug === expandedCard);
-    if (card?.body) {
-      setCardBody(card.body);
-      return;
-    }
-    setBodyLoading(true);
+    if (card?.body) return;
     ds.getMemoryCard(expandedCard)
-      .then((d) => {
-        setCardBody(d?.body ?? '');
-        setBodyLoading(false);
-      })
-      .catch(() => {
-        setCardBody('');
-        setBodyLoading(false);
-      });
+      .then((d) => setFetchedBody({ slug: expandedCard, body: d?.body ?? '' }))
+      .catch(() => setFetchedBody({ slug: expandedCard, body: '' }));
   }, [ds, expandedCard, cards]);
+
+  // Use body from list if present, otherwise the lazily fetched one.
+  const expandedListCard = expandedCard ? cards.find(c => c.slug === expandedCard) : undefined;
+  const cardBody = expandedCard
+    ? (expandedListCard?.body ?? (fetchedBody?.slug === expandedCard ? fetchedBody.body : ''))
+    : '';
+  const bodyLoading = !!expandedCard && !expandedListCard?.body && fetchedBody?.slug !== expandedCard;
 
   const categories = [...new Set(cards.map(c => c.category))].sort();
 

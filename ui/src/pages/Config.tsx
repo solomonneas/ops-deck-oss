@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Settings,
   Server,
@@ -56,11 +56,7 @@ const ENV_ROWS: EnvRow[] = [
 export default function Config() {
   const ds = useDataSource();
   const [showApiKey, setShowApiKey] = useState(false);
-  const [storedKey, setStoredKey] = useState('');
-
-  useEffect(() => {
-    setStoredKey(getApiKey());
-  }, []);
+  const [storedKey] = useState(() => getApiKey());
 
   const apiKeyMasked = storedKey
     ? `${storedKey.slice(0, 4)}${'•'.repeat(Math.max(0, storedKey.length - 4))}`

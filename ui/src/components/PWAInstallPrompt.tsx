@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 
 type InstallOutcome = 'accepted' | 'dismissed';
@@ -18,13 +18,15 @@ function isStandaloneMode() {
 export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [hidden, setHidden] = useState(false);
-
-  const canShow = useMemo(() => {
-    if (hidden || isStandaloneMode()) return false;
-
+  // Snapshot the environment checks once on mount; `hidden` covers all
+  // later changes (dismiss, install) within this session.
+  const [initiallyAllowed] = useState(() => {
+    if (isStandaloneMode()) return false;
     const dismissedUntil = Number(localStorage.getItem(DISMISS_KEY) || 0);
     return Date.now() > dismissedUntil;
-  }, [hidden]);
+  });
+
+  const canShow = initiallyAllowed && !hidden;
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {

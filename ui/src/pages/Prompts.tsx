@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDataSource } from '../data-sources/useDataSource';
-import type { Prompt } from '../data-sources/types';
+import type { DataSource, Prompt } from '../data-sources/types';
 import { BookOpen, X, Search, Tag, Copy, Check } from 'lucide-react';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -15,7 +15,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function Prompts() {
   const ds = useDataSource();
   const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading is derived: we are loading until the current data source has
+  // answered (initially, and again whenever the data source changes).
+  const [loadedDs, setLoadedDs] = useState<DataSource | null>(null);
+  const loading = loadedDs !== ds;
   const [, setError] = useState<Error | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
   const [search, setSearch] = useState('');
@@ -23,10 +26,9 @@ export default function Prompts() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
     ds.getPrompts()
-      .then((d) => { setPrompts(d); setLoading(false); })
-      .catch((e) => { setError(e); setLoading(false); });
+      .then((d) => { setPrompts(d); setLoadedDs(ds); })
+      .catch((e) => { setError(e); setLoadedDs(ds); });
   }, [ds]);
 
   const allCategories = Array.from(new Set(prompts.map(p => p.category))).sort();

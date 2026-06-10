@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDataSource } from '../data-sources/useDataSource';
-import type { JournalEntry } from '../data-sources/types';
+import type { DataSource, JournalEntry } from '../data-sources/types';
 import { Notebook, ChevronDown, ChevronRight, Tag } from 'lucide-react';
 
 const TAG_COLORS: Record<string, string> = {
@@ -17,17 +17,19 @@ const TAG_COLORS: Record<string, string> = {
 export default function Journal() {
   const ds = useDataSource();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading is derived: we are loading until the current data source has
+  // answered (initially, and again whenever the data source changes).
+  const [loadedDs, setLoadedDs] = useState<DataSource | null>(null);
+  const loading = loadedDs !== ds;
   const [, setError] = useState<Error | null>(null);
 
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [filterTag, setFilterTag] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
     ds.getJournal()
-      .then((d) => { setEntries(d); setLoading(false); })
-      .catch((e) => { setError(e); setLoading(false); });
+      .then((d) => { setEntries(d); setLoadedDs(ds); })
+      .catch((e) => { setError(e); setLoadedDs(ds); });
   }, [ds]);
 
   const allTags = Array.from(
@@ -142,7 +144,7 @@ export default function Journal() {
                 )}
 
                 <div className="space-y-6">
-                  {monthEntries.map((entry, entryIdx) => (
+                  {monthEntries.map((entry) => (
                     <div key={entry.date} className="relative">
                       {/* Timeline dot */}
                       <div className="absolute left-[-1.75rem] top-3 w-3 h-3 rounded-full bg-[#7c5cfc]/60 border-2 border-[#7c5cfc] shadow-[0_0_8px_rgba(124,92,252,0.5)]" />

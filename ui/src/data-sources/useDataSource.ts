@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { DataSourceContext } from "./DataSourceProvider";
+import { DataSourceContext } from "./context";
 
 export function useDataSource() {
   return useContext(DataSourceContext);

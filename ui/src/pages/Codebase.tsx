@@ -237,7 +237,6 @@ function ProjectCard({ project }: { project: ProjectEntry }) {
 export default function Codebase() {
   const ds = useDataSource();
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
-  const [, setLoading] = useState(true);
   const [, setError] = useState<Error | null>(null);
   const [tab, setTab] = useState<TabKey>('projects');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -245,10 +244,9 @@ export default function Codebase() {
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    setLoading(true);
     ds.getCodebase()
-      .then((d) => { setProjects(d); setLoading(false); })
-      .catch((e) => { setError(e); setLoading(false); });
+      .then((d) => setProjects(d))
+      .catch((e) => setError(e));
   }, [ds]);
 
   const stats = useMemo(() => {

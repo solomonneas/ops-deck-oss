@@ -13,7 +13,7 @@ import {
   Rocket,
   Settings,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import LobsterIcon from './LobsterIcon';
 
 const navItems = [
@@ -31,8 +31,12 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
-  // Close mobile menu on nav
-  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  // Close mobile menu on nav (adjust state during render when the route changes)
+  const [prevPath, setPrevPath] = useState(location.pathname);
+  if (prevPath !== location.pathname) {
+    setPrevPath(location.pathname);
+    setMobileOpen(false);
+  }
 
   return (
     <>

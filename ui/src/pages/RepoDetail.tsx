@@ -11,6 +11,7 @@ import {
 import { type Repo } from '../data/repos';
 import { type RepoDetailData, type DiagramLayer, type DataFlowStep, type CodeSnippet, type TechDecision, type ApiEndpoint } from '../data/repos-detail';
 import { useDataSource } from '../data-sources/useDataSource';
+import type { DataSource } from '../data-sources/types';
 
 // Host for in-app links to running services. Defaults to the current page
 // host (so the link resolves wherever the dashboard is being viewed from);
@@ -182,24 +183,23 @@ export default function RepoDetail() {
   const ds = useDataSource();
   const [repo, setRepo] = useState<Repo | null>(null);
   const [detail, setDetail] = useState<RepoDetailData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Loading is derived: with a slug, we are loading until the current data
+  // source has answered for that slug (initially, and again on any change).
+  const [loaded, setLoaded] = useState<{ ds: DataSource; slug: string } | null>(null);
+  const loading = !!slug && !(loaded && loaded.ds === ds && loaded.slug === slug);
   const [, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!slug) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (!slug) return;
     Promise.all([ds.getRepos(), ds.getRepoDetail(slug)])
       .then(([repos, d]) => {
         setRepo(repos.find((r) => r.slug === slug) ?? null);
         setDetail(d);
-        setLoading(false);
+        setLoaded({ ds, slug });
       })
       .catch((e) => {
         setError(e);
-        setLoading(false);
+        setLoaded({ ds, slug });
       });
   }, [ds, slug]);
 
