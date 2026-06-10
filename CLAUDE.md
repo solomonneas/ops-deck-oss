@@ -9,7 +9,7 @@ Copied + scrubbed from `~/repos/opsdeck` (private). Sidecar forked from the `dev
 ## Hard rules for any agent editing this repo
 
 - Public repo. Content Guard runs pre-commit + CI + PR. Never `--no-verify`.
-- No mention of personal hostnames, the home LAN IP range, school affiliation, or other identifiers listed in `.githooks/project-blocks.txt`. That file is the single source of truth for layer-2 blocks.
+- No mention of personal hostnames, the home LAN IP range, school affiliation, or other identifiers. The layer-2 block patterns live in `.githooks/project-blocks.local.txt` (untracked, gitignored - the tokens themselves must stay out of the public repo) plus the `PROJECT_BLOCKS_EXTRA` Actions secret for CI. The tracked `.githooks/project-blocks.txt` holds only generic patterns and documents the convention.
 - `~/.openclaw/workspace/...` mentions in docs are OK (warn-level, not block).
 - No Co-Authored-By trailers. No AI/assistant attribution in commit messages (the commit-msg hook blocks it).
 
@@ -29,4 +29,4 @@ Copied + scrubbed from `~/repos/opsdeck` (private). Sidecar forked from the `dev
 
 ## Project-specific blocks
 
-The pre-commit hook (`.githooks/pre-commit`), commit-msg hook (`.githooks/commit-msg`), CI workflow (`.github/workflows/content-guard.yml`), and PR wrapper (`scripts/pr-create.sh`) all read patterns from `.githooks/project-blocks.txt` to keep enforcement consistent. Add new tokens to that single file.
+The pre-commit hook (`.githooks/pre-commit`), commit-msg hook (`.githooks/commit-msg`), and PR wrapper (`scripts/pr-create.sh`) read patterns from `.githooks/project-blocks.txt` (tracked, generic patterns only) plus `.githooks/project-blocks.local.txt` (untracked, identifying tokens). The CI workflow (`.github/workflows/content-guard.yml`) reads the tracked file plus the `PROJECT_BLOCKS_EXTRA` repo Actions secret. When adding an identifying token, update BOTH the local file and the secret (`gh secret set PROJECT_BLOCKS_EXTRA`); never put it in a tracked file.

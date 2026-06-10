@@ -25,8 +25,9 @@ fi
 
 # === Project-specific block ===
 BLOCK_FILE="$REPO_ROOT/.githooks/project-blocks.txt"
-if [ -f "$BLOCK_FILE" ]; then
-  PROJECT_BLOCK_RE="$(grep -Ev '^\s*(#|$)' "$BLOCK_FILE" | paste -sd '|' -)"
+LOCAL_BLOCK_FILE="$REPO_ROOT/.githooks/project-blocks.local.txt"
+if [ -f "$BLOCK_FILE" ] || [ -f "$LOCAL_BLOCK_FILE" ]; then
+  PROJECT_BLOCK_RE="$(cat "$BLOCK_FILE" "$LOCAL_BLOCK_FILE" 2>/dev/null | grep -Ev '^\s*(#|$)' | paste -sd '|' - || true)"
   if [ -n "$PROJECT_BLOCK_RE" ]; then
     if grep -nP "$PROJECT_BLOCK_RE" "$COMMIT_MSG_FILE" > /tmp/cg-msg-project-blocks.txt 2>/dev/null; then
       echo ""

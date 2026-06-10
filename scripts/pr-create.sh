@@ -71,8 +71,9 @@ if [ -s "$TMP_DIR/cg.json" ] && command -v jq >/dev/null 2>&1; then
 fi
 
 # === Layer 2: project-specific block patterns ===
-if [ -f "$PROJECT_BLOCKS_FILE" ]; then
-  PROJECT_BLOCK_RE="$(grep -Ev '^\s*(#|$)' "$PROJECT_BLOCKS_FILE" | paste -sd '|' -)"
+PROJECT_BLOCKS_LOCAL_FILE=".githooks/project-blocks.local.txt"
+if [ -f "$PROJECT_BLOCKS_FILE" ] || [ -f "$PROJECT_BLOCKS_LOCAL_FILE" ]; then
+  PROJECT_BLOCK_RE="$(cat "$PROJECT_BLOCKS_FILE" "$PROJECT_BLOCKS_LOCAL_FILE" 2>/dev/null | grep -Ev '^\s*(#|$)' | paste -sd '|' - || true)"
   if [ -n "$PROJECT_BLOCK_RE" ]; then
     if grep -nP "$PROJECT_BLOCK_RE" "$BODY_ABS" > "$TMP_DIR/project-blocks.txt" 2>/dev/null; then
       echo ""

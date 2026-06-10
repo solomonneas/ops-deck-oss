@@ -43,3 +43,6 @@ code-search/data/runtime/
 # Local brigade memory (cards are local-only, never committed)
 /memory/
 .brigade/
+
+# Local-only content guard patterns (the tokens themselves must stay private)
+.githooks/project-blocks.local.txt

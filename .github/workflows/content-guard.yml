@@ -23,25 +23,41 @@ jobs:
           python3 -m content_guard.git_scan --all-tracked --json > cg-result.json
           python3 -c "import json,sys; d=json.load(open('cg-result.json')); blocks=[f for f in d.get('findings',[]) if f.get('severity')=='block']; print('blocks:', len(blocks)); [print(' ', f) for f in blocks[:20]]; sys.exit(1 if blocks else 0)"
       - name: Scan tracked files for project-specific blocks
+        env:
+          # Identifying tokens live in this secret, not in the tracked pattern
+          # file - a published blocklist leaks the very tokens it blocks. Keep
+          # it in sync with .githooks/project-blocks.local.txt (untracked),
+          # which the local hooks read.
+          PROJECT_BLOCKS_EXTRA: ${{ secrets.PROJECT_BLOCKS_EXTRA }}
         run: |
-          # Read the patterns from .githooks/project-blocks.txt - same source the
-          # pre-commit hook uses locally, so CI behavior matches developer behavior.
+          # Read generic patterns from .githooks/project-blocks.txt - same
+          # source the pre-commit hook uses locally - and combine with the
+          # PROJECT_BLOCKS_EXTRA secret.
           if [ ! -f .githooks/project-blocks.txt ]; then
             echo "Missing .githooks/project-blocks.txt"; exit 1
           fi
           # Build a single PCRE alternation from the pattern file (skip blank/# lines).
-          PATTERN="$(grep -vE '^\s*(#|$)' .githooks/project-blocks.txt | paste -sd '|' -)"
+          PATTERN="$(grep -vE '^\s*(#|$)' .githooks/project-blocks.txt | paste -sd '|' - || true)"
+          if [ -n "$PROJECT_BLOCKS_EXTRA" ]; then
+            if [ -n "$PATTERN" ]; then
+              PATTERN="${PATTERN}|${PROJECT_BLOCKS_EXTRA}"
+            else
+              PATTERN="$PROJECT_BLOCKS_EXTRA"
+            fi
+          fi
           if [ -z "$PATTERN" ]; then
             echo "No patterns to enforce"; exit 0
           fi
           # Scan all tracked files. Exempt the pattern file and the hooks themselves.
           # .content-guard.yml legitimately contains the regex literals it
           # defines, so it's exempt for the same reason the pattern file is.
+          # Print file:line ONLY - these logs are public, so the matched text
+          # (which may be a blocked token) must never be echoed.
           MATCHES="$(git ls-files \
             | grep -vE '^\.githooks/(project-blocks\.txt|pre-commit|commit-msg)$|^\.content-guard\.yml$' \
-            | xargs -I{} grep -nP -H "$PATTERN" {} 2>/dev/null || true)"
+            | xargs -I{} grep -nP -H "$PATTERN" {} 2>/dev/null | cut -d: -f1,2 || true)"
           if [ -n "$MATCHES" ]; then
-            echo "Project-specific Content Guard rules BLOCKED:"
+            echo "Project-specific Content Guard rules BLOCKED at (file:line):"
             echo "$MATCHES"
             exit 1
           fi
