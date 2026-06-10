@@ -5,6 +5,13 @@ Public repo. Self-hosted operational dashboard for OpenClaw users, run via
 
 ## Definition of Done
 
+```
+./scripts/verify
+```
+
+Runs every gate below in one shot: the UI set inside `ui/` and the sidecar
+pytest inside `agent-intel/`.
+
 A change is done only when every command below passes. Run the set matching
 what you touched; run both sets if in doubt.
 

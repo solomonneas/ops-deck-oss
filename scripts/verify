@@ -1,0 +1,21 @@
+#!/bin/bash
+# Single verification entrypoint. AGENTS.md's Definition of Done defers to
+# this file, so the gate lives in exactly one place.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# UI gates
+(
+  cd ui
+  npm run test
+  npx tsc -b --noEmit
+  npm run lint
+  npm run build
+)
+
+# Sidecar gates (deps from agent-intel/requirements.txt must be importable
+# with python3)
+(
+  cd agent-intel
+  python3 -m pytest -v
+)
